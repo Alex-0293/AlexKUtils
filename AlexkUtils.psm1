@@ -13,8 +13,10 @@
    Get-NewAESKey "d:\key1.aes"
 #>
 function Get-NewAESKey {
+    [CmdletBinding()]
     param
     (
+        [Parameter( Mandatory )]
         [string] $AESKeyFilePath
     )
 
@@ -38,8 +40,10 @@ function Get-NewAESKey {
    Get-SettingsFromFile  "d:\powershell"
 #>
 Function Get-SettingsFromFile {
+    [CmdletBinding()]
     param
     (
+        [Parameter( Mandatory )]
         [string] $RootPath
     )
     
@@ -49,7 +53,14 @@ Function Get-SettingsFromFile {
     ReplaceVars $Params
     return $Params
 }
-Function ReplaceVars ($PSO) {
+Function ReplaceVars  {
+    [CmdletBinding()]
+    param
+    (
+        [Parameter( Mandatory )]
+        $PSO
+    )
+    
     $NotePropertys = $PSO | get-member -type NoteProperty
 
     foreach ($item in $NotePropertys) {
