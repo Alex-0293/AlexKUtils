@@ -2,13 +2,13 @@
  .Synopsis
   Generate new AES key file.
 
- .Description
+  .Description
   Generate new AES key file with key file path.
 
  .Parameter AESKeyFilePath
   Full path to file for generating new AES key file into.
 
- 
+
  .Example
    Get-NewAESKey "d:\key1.aes"
 #>
@@ -23,8 +23,7 @@ function Get-NewAESKey {
     $AESKey = New-Object Byte[] 32
     [Security.Cryptography.RNGCryptoServiceProvider]::Create().GetBytes($AESKey)
     $AESKey | out-file $AESKeyFilePath
-}
-
+}    
 <#
  .Synopsis
   Get settings from file.
@@ -74,7 +73,6 @@ Function ReplaceVars  {
     }
 
 }
-
 Function Get-VarFromFile {
     param
     (
@@ -101,7 +99,6 @@ Function Get-VarFromFile {
     }
     Else { return $null }   
 }
-
 Function Set-VarToFile {
     param
     (
@@ -113,7 +110,6 @@ Function Set-VarToFile {
     
     ConvertTo-SecureString $Var -AsPlainText | ConvertFrom-SecureString -Key (get-content $AESKeyFilePath) | Set-Content $VarFilePath
 }
-
 Function Add-ToLog {
     Param
     (
@@ -139,7 +135,6 @@ Function Add-ToLog {
     # }
     # Send-TelegramMessage @Params
 }
-
 function Disconnect-VPN {
     Param
     (
@@ -158,7 +153,6 @@ function Disconnect-VPN {
         return $false
     }
 }
-
 Function Connect-VPN {
     Param
     (
@@ -180,7 +174,6 @@ Function Connect-VPN {
         return $false
     }
 }
-
 Function RebootSwitches {
     Param
     (
@@ -216,7 +209,6 @@ Function RebootSwitches {
         }
     }
 }
-
 <#
  .Synopsis
   Test hardware rebooting.
@@ -301,7 +293,6 @@ Function Get-EventList {
    
     return $Res
 }
-  
 Function Send-Email {
     param (
         [string] $SmtpServer,
@@ -362,7 +353,6 @@ Function Send-Email {
 
     }
 }
-
 Function StartPSScript {
     param (
         [string] $ScriptPath,
@@ -422,7 +412,6 @@ Function StartPSScript {
         } 
     }
 }
-
 Function RebootSwitchesInInterval {
     param (
         [array] $SwitchIp,
@@ -460,7 +449,6 @@ Function RebootSwitchesInInterval {
         } 
     }
 }
-
 Function RestartLocalHostInInterval {
     param (
         [string] $EventLogPath,
@@ -488,7 +476,6 @@ Function RestartLocalHostInInterval {
         Restart-Computer localhost -Force 
     } 
 }
-
 Function ShowNotification { 
     param (
         [string] $MsgTitle,
@@ -569,7 +556,6 @@ function Get-Logger {
     }
     return $Logger
 }
-
 Function RestartServiceInInterval {
     param (
         [string] $EventLogPath,
@@ -598,7 +584,6 @@ Function RestartServiceInInterval {
         Restart-Service $ServiceName -Force  
     } 
 }
-
 Function Send-TelegramMessage {
     param (
         [string] $Token,
@@ -632,10 +617,12 @@ Function Send-TelegramMessage {
 function InitLogging {
     [CmdletBinding()]
     Param(
-        [Parameter( Mandatory )]
+        [Parameter( Mandatory, Position=0)]
         [string]$MyScriptRoot,
-        [Parameter( Mandatory )]
-        [string]$StrictVer
+        [Parameter( Mandatory, Position=1 )]
+        [string]$StrictVer,
+        [Parameter( Position=2 )]
+        [bool]$Dbg = $false
     )
     Set-StrictMode -Version $StrictVer #Latest
 
@@ -652,13 +639,14 @@ function InitLogging {
         Start-Transcript -Path $TranscriptPath -Append -Force
     }
     else {
-        $ErrorActionPreference = 'Stop'
+        if (! $Dbg){
+            $ErrorActionPreference = 'Stop'
+        }
     }
 
     $ErrorFileName = "Errors.log"
     $Logger = Get-Logger "$MyScriptRoot\$ErrorFileName"
 }
-
 function InitVars {
     [CmdletBinding()]
     Param(
@@ -669,7 +657,7 @@ function InitVars {
         . ("$MyScriptRoot\Vars.ps1")
     }
     catch {
-        Write-Host "Error while loading supporting PowerShell Scripts" 
+        Write-Host "Error while loading variables from file $MyScriptRoot\Vars.ps1" 
     }
 
 }
