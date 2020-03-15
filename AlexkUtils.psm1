@@ -617,11 +617,8 @@ Function Send-TelegramMessage {
 function InitLogging {
     [CmdletBinding()]
     Param(
-        [Parameter( Mandatory, Position=0)]
         [string]$MyScriptRoot,
-        [Parameter( Mandatory, Position=1 )]
         [string]$StrictVer,
-        [Parameter( Position=2 )]
         [bool]$Dbg = $false
     )
     Set-StrictMode -Version $StrictVer #Latest
@@ -661,5 +658,116 @@ function InitVars {
     }
 
 }
+Function Get-HTMLTable {
+    [CmdletBinding()]
+    Param(
+        [Parameter( Mandatory = $true, Position = 0 )]
+        [string]$String        
+    )
+    $Lines = $String -split "`n"
+    foreach ($item in $Lines) {
+        if ($item -ne "") {
+            $SplitedRow = Get-SplitedRow $item
+            $HTML += Get-Row $SplitedRow
+        }
+    }
+    Return $HTML
+}
+function Get-Row {
+    [CmdletBinding()]
+    Param(
+        [Parameter( Mandatory=$true, Position = 0 )]
+        [array]$SplitedRow,
+        [Parameter( Mandatory=$false, Position = 1 )]
+        [string]$ColSpan = 0
+    )    
+    $row = ""
+    if ($SplitedRow -ne "") {
+        $rows = ""
+        $row = @"
+            <tr>
+                %row%
+            </tr>
 
-Export-ModuleMember -Function Get-NewAESKey, Get-SettingsFromFile, Get-VarFromFile, Disconnect-VPN, Connect-VPN, Add-ToLog, IsHardwareRebooting, RebootSwitches, RebootSwitchesInInterval, Get-EventList, Send-Email, StartPSScript, RestartLocalHostInInterval, ShowNotification, Get-Logger, RestartServiceInInterval, Send-TelegramMessage, InitLogging, InitVars
+"@
+        $ColCount = 1
+        foreach ($col in $SplitedRow) {
+            if ($ColCount -ne 3) {
+                if ($rows -eq "") {
+                    $cols = @($col.Split("]"))
+                    if ($cols.count -eq 1) {
+                        $rows += (Get-Col $cols[0] $ColSpan)
+                    }
+                    Else {
+                        $rows += (Get-Col $cols[1] $ColSpan)
+                    }
+                }
+                Else {
+                    $cols = @($col.Split("]"))
+                    if ($cols.count -eq 1) {
+                        $rows += "`n            " + (Get-Col $cols[0] $ColSpan)
+                    }
+                    Else {
+                        $rows += "`n            " + (Get-Col $cols[1] $ColSpan)
+                    }
+                }
+            }
+            $ColCount += 1
+        }
+        $row = $row.Replace("%row%", $rows)
+    }
+    return $row
+}
+
+Function Get-Col  {
+    [CmdletBinding()]
+    Param(
+        [Parameter( Mandatory = $true, Position = 0 )]
+        [string]$String,
+        [Parameter( Mandatory = $false, Position = 1 )]
+        [string]$ColSpan = 0
+    )  
+    $String = $String.Trim()
+    $col = " <td%ColSpan%>%String%</td>"
+    if ($ColSpan -gt 0) {
+        $col = $col.Replace("%ColSpan%", " colspan=`"$ColSpan`"")
+    }
+    Else {
+        $col = $col.Replace("%ColSpan%", "")
+    }
+    $col = $col.Replace("%String%", $String)
+    return $col 
+}
+Function Get-ContentFromHTMLTemlate {
+    [CmdletBinding()]
+    Param(
+        [Parameter( Mandatory = $true, Position = 0 )]
+        [string]$HTMLData,
+        [Parameter( Mandatory = $true, Position = 1 )]
+        [array]$ColNames,
+        [Parameter( Mandatory = $true, Position = 2 )]
+        [string]$HTMLTemplateFile,
+        [Parameter( Mandatory = $false, Position = 3 )]
+        [string]$HTMLFile
+    )
+    $th = @"
+            <th>
+                %col%
+            </th>
+
+"@
+    $Header=""
+    foreach ($Col in $ColNames){
+        $Header += $th.Replace("%col%", $Col)
+    }
+    
+    $HTMLTemplate = Get-Content $HTMLTemplateFile
+    $HTMLTemplate = $HTMLTemplate.Replace( "%data%", $HTMLData)
+    $HTMLTemplate = $HTMLTemplate.Replace( "%colnames%", $Header)
+    if ($HTMLFile -ne "") { 
+        $HTMLTemplate | Out-File $HTMLFile -Encoding utf8 -Force
+    }
+    return $HTMLTemplate
+}
+
+Export-ModuleMember -Function Get-NewAESKey, Get-SettingsFromFile, Get-VarFromFile, Disconnect-VPN, Connect-VPN, Add-ToLog, IsHardwareRebooting, RebootSwitches, RebootSwitchesInInterval, Get-EventList, Send-Email, StartPSScript, RestartLocalHostInInterval, ShowNotification, Get-Logger, RestartServiceInInterval, Send-TelegramMessage, InitLogging, InitVars, Get-HTMLTable, Get-Row, Get-Col, Get-ContentFromHTMLTemlate
