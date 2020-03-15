@@ -584,35 +584,48 @@ Function RestartServiceInInterval {
         Restart-Service $ServiceName -Force  
     } 
 }
-Function Send-TelegramMessage {
-    param (
-        [string] $Token,
-        [string] $ChatID,
-        [string] $Message,
-        [string] $Proxy
-    )
-    [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
-    $URI = "https://api.telegram.org/bot" + $Token + "/sendMessage?chat_id=" + $ChatID + "&text=" + $Message
-    write-host $URI
-    if ($Proxy -ne "") { 
-        # If you do NOT need Basic Auth to get through your proxy, use the following:
+Function Set-TelegramMessage {
+    [CmdletBinding()]
+    Param(
+        [Parameter( Mandatory = $true, Position = 0 )]
+        [string]$Token,
+        [Parameter( Mandatory = $true, Position = 1 )]
+        [string]$ChatID,
+        [Parameter( Mandatory = $true, Position = 2 )]
+        [string]$Message,
+        [Parameter( Mandatory = $false, Position = 3 )]
+        [string]$ProxyURL,
+        [Parameter( Mandatory = $false, Position = 4 )]
+        [string]$ProxyUser,
+        [Parameter( Mandatory = $false, Position = 5 )]
+        [string]$ProxyPass
+    ) 
 
-        [system.net.webrequest]::defaultwebproxy = New-Object system.net.webproxy($Proxy)
-        [system.net.webrequest]::defaultwebproxy.credentials = [System.Net.CredentialCache]::DefaultNetworkCredentials
+    try {
+        if ([Net.ServicePointManager]::SecurityProtocol -notcontains 'Tls12') {
+            [Net.ServicePointManager]::SecurityProtocol += [Net.SecurityProtocolType]::Tls12
+        }
+    }
+    Catch {}
+    [System.Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
+
+    $URI = "https://api.telegram.org/bot" + $Token + "/sendMessage?chat_id=" + $ChatID + "&text=" + $Message
+     
+    if ($Proxy -ne "") {    
+        $secPasswd = ConvertTo-SecureString $ProxyPass -AsPlainText -Force
+        $myCreds = New-Object System.Management.Automation.PSCredential -ArgumentList $ProxyUser, $secPasswd
+        [system.net.webrequest]::defaultwebproxy = New-Object system.net.webproxy($ProxyURL)
+        [system.net.webrequest]::defaultwebproxy.credentials = $myCreds
         [system.net.webrequest]::defaultwebproxy.BypassProxyOnLocal = $true
+
+        
         $Response = Invoke-RestMethod -Uri $URI
     }
     else {
         $Response = Invoke-RestMethod -Uri $URI
     }
-    end if
-    # $Friefox = "C:\Program Files (x86)\Mozilla Firefox\firefox.exe"
-    # & $Friefox
-    # Start-Sleep -Seconds 4
-    # & $Friefox $URI
-    # Start-Sleep -Seconds 4
-    # $Proc = Get-Process -name "firefox"
-    # Stop-Process -InputObject $Proc
+
+    return $Response
 }
 function InitLogging {
     [CmdletBinding()]
@@ -770,4 +783,4 @@ Function Get-ContentFromHTMLTemlate {
     return $HTMLTemplate
 }
 
-Export-ModuleMember -Function Get-NewAESKey, Get-SettingsFromFile, Get-VarFromFile, Disconnect-VPN, Connect-VPN, Add-ToLog, IsHardwareRebooting, RebootSwitches, RebootSwitchesInInterval, Get-EventList, Send-Email, StartPSScript, RestartLocalHostInInterval, ShowNotification, Get-Logger, RestartServiceInInterval, Send-TelegramMessage, InitLogging, InitVars, Get-HTMLTable, Get-Row, Get-Col, Get-ContentFromHTMLTemlate
+Export-ModuleMember -Function Get-NewAESKey, Get-SettingsFromFile, Get-VarFromFile, Disconnect-VPN, Connect-VPN, Add-ToLog, IsHardwareRebooting, RebootSwitches, RebootSwitchesInInterval, Get-EventList, Send-Email, StartPSScript, RestartLocalHostInInterval, ShowNotification, Get-Logger, RestartServiceInInterval, Set-TelegramMessage, InitLogging, InitVars, Get-HTMLTable, Get-Row, Get-Col, Get-ContentFromHTMLTemlate
