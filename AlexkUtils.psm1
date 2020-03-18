@@ -24,20 +24,6 @@ function Get-NewAESKey {
     [Security.Cryptography.RNGCryptoServiceProvider]::Create().GetBytes($AESKey)
     $AESKey | out-file $AESKeyFilePath
 }    
-<#
- .Synopsis
-  Get settings from file.
-
- .Description
-  Load settings from file to hash table.
-
- .Parameter RootPath
-  Full path to folder where the files are.
-
- 
- .Example
-   Get-SettingsFromFile  "d:\powershell"
-#>
 Function Get-SettingsFromFile {
     [CmdletBinding()]
     param
@@ -73,11 +59,16 @@ Function ReplaceVars  {
     }
 
 }
-Function Get-VarFromFile {
+Function Get-VarFromFile  {
+    [CmdletBinding()]
     param
-    (
-        [string] $AESKeyFilePath,
-        [string] $VarFilePath
+    (   
+        [Parameter(Mandatory=$true, Position=0)]
+        [ValidateNotNullOrEmpty()]
+        [string]$AESKeyFilePath,
+        [Parameter(Mandatory=$true, Position=1)]
+        [ValidateNotNullOrEmpty()]
+        [string]$VarFilePath
     )
     
     if (!(test-path $AESKeyFilePath)) {
@@ -92,11 +83,19 @@ Function Get-VarFromFile {
     else { $VarFilePathExist = $true }
      
     if ($VarFilePathExist -and $AESKeyFilePathExist) {
-        $Var = Get-Content $VarFilePath | ConvertTo-SecureString -Key (get-content $AESKeyFilePath) 
-        $Var = [System.Runtime.InteropServices.Marshal]::SecureStringToBSTR($Var)
-        $Var = [System.Runtime.InteropServices.Marshal]::PtrToStringAuto($Var)
-        return $Var
-    }
+            try {
+                $Var = Get-Content $VarFilePath | ConvertTo-SecureString -Key (get-content $AESKeyFilePath) 
+                $Var = [System.Runtime.InteropServices.Marshal]::SecureStringToBSTR($Var)
+                $Var = [System.Runtime.InteropServices.Marshal]::PtrToStringAuto($Var)
+                return $Var
+            }
+            Catch {
+                write-host "Error, check your key"
+                return $Null 
+            }
+            
+
+        }
     Else { return $null }   
 }
 Function Set-VarToFile {
@@ -344,7 +343,8 @@ Function Send-Email {
         $smtp.Send($emailMessage)  
     }
     catch {
-        "Send-Email exeption $($_.Exception)"        
+        Get-ErrorReporting $_  
+        write-host "Send-Email exeption $($_.Exception)"        
         if ($Cntr -gt 0) {
             start-sleep -Seconds 300
             $Cntr = $Cntr - 1
@@ -631,43 +631,32 @@ function InitLogging {
     [CmdletBinding()]
     Param(
         [string]$MyScriptRoot,
-        [string]$StrictVer,
-        [bool]$Dbg = $false
+        [string]$StrictVer
     )
     Set-StrictMode -Version $StrictVer #Latest
+    
+    $ErrorFileName = "Errors.log"
+    $Global:Logger = Get-Logger "$MyScriptRoot\$ErrorFileName"
 
-    # Error trap
-    trap {
-        [string]$line = $_.InvocationInfo.ScriptLineNumber
-        [string]$Script = $_.InvocationInfo.ScriptName
-        [string]$Message = "$_ [script] $Script [line] $line"
-        $Logger.AddErrorRecord( $Message )
-        exit 1
-    }
     if (Test-Path "$MyScriptRoot\debug.txt") {
         $TranscriptPath = "$MyScriptRoot\Transcript.log"
         Start-Transcript -Path $TranscriptPath -Append -Force
     }
     else {
-        if (! $Dbg){
             $ErrorActionPreference = 'Stop'
-        }
-    }
-
-    $ErrorFileName = "Errors.log"
-    $Logger = Get-Logger "$MyScriptRoot\$ErrorFileName"
+    }    
 }
-function InitVars {
+function Get-Vars {
     [CmdletBinding()]
     Param(
-        [Parameter( Mandatory )]
-        [string]$MyScriptRoot
+        [Parameter( Mandatory = $true, Position = 0 )]
+        [string]$VarFile
     )
     try {
-        . ("$MyScriptRoot\Vars.ps1")
+        . ("$VarFile")
     }
     catch {
-        Write-Host "Error while loading variables from file $MyScriptRoot\Vars.ps1" 
+        Write-Host "Error while loading variables from file $VarFile" 
     }
 
 }
@@ -675,59 +664,48 @@ Function Get-HTMLTable {
     [CmdletBinding()]
     Param(
         [Parameter( Mandatory = $true, Position = 0 )]
-        [string]$String        
+        [array]$Array        
     )
-    $Lines = $String -split "`n"
-    foreach ($item in $Lines) {
-        if ($item -ne "") {
-            $SplitedRow = Get-SplitedRow $item
-            $HTML += Get-Row $SplitedRow
+    [string]$HTML = ""
+    if ($Array.count -gt 0) {        
+        foreach ($item in $Array) {
+            if ($item -ne "") {
+                $HTML += (Get-Row $item) + "`n"
+            }
         }
     }
-    Return $HTML
+    Return $HTML    
 }
 function Get-Row {
     [CmdletBinding()]
     Param(
         [Parameter( Mandatory=$true, Position = 0 )]
-        [array]$SplitedRow,
+        [array]$Line,
         [Parameter( Mandatory=$false, Position = 1 )]
         [string]$ColSpan = 0
     )    
     $row = ""
-    if ($SplitedRow -ne "") {
+    if ($Line.count -gt 0) {
         $rows = ""
         $row = @"
             <tr>
                 %row%
             </tr>
-
 "@
-        $ColCount = 1
-        foreach ($col in $SplitedRow) {
-            if ($ColCount -ne 3) {
-                if ($rows -eq "") {
-                    $cols = @($col.Split("]"))
-                    if ($cols.count -eq 1) {
-                        $rows += (Get-Col $cols[0] $ColSpan)
-                    }
-                    Else {
-                        $rows += (Get-Col $cols[1] $ColSpan)
-                    }
-                }
-                Else {
-                    $cols = @($col.Split("]"))
-                    if ($cols.count -eq 1) {
-                        $rows += "`n            " + (Get-Col $cols[0] $ColSpan)
-                    }
-                    Else {
-                        $rows += "`n            " + (Get-Col $cols[1] $ColSpan)
-                    }
-                }
+        if ((Get-RowFillness $Line) -gt 1){
+            foreach ($col in ($Line[0].PSObject.Properties.Name )) {
+                $rows += (Get-Col $Line.$col $ColSpan) + "`n"
             }
-            $ColCount += 1
+            $row = $row.Replace("%row%", $rows)
         }
-        $row = $row.Replace("%row%", $rows)
+        Else{
+            $ColCount  = $Line[0].PSObject.Properties.Name.count
+            $Col       = $Line[0].PSObject.Properties.Name[0]
+            $ColSpan   = $ColCount
+            $bold      = $true
+            $rows     += (Get-Col $Line.$col $ColSpan $bold) + "`n"
+            $row       = $Row.Replace("%row%", $rows)
+        }
     }
     return $row
 }
@@ -735,13 +713,21 @@ function Get-Row {
 Function Get-Col  {
     [CmdletBinding()]
     Param(
-        [Parameter( Mandatory = $true, Position = 0 )]
+        [Parameter( Mandatory = $false, Position = 0 )]
         [string]$String,
         [Parameter( Mandatory = $false, Position = 1 )]
-        [string]$ColSpan = 0
+        [string]$ColSpan = 0,
+        [Parameter( Mandatory = $false, Position = 2 )]
+        [bool]$Bold = $false
     )  
     $String = $String.Trim()
-    $col = " <td%ColSpan%>%String%</td>"
+    if ($Bold) {
+        $col = " <td%ColSpan%><b>%String%</b></td>"
+    } 
+    else {
+        $col = " <td%ColSpan%>%String%</td>"
+    }
+ 
     if ($ColSpan -gt 0) {
         $col = $col.Replace("%ColSpan%", " colspan=`"$ColSpan`"")
     }
@@ -763,24 +749,70 @@ Function Get-ContentFromHTMLTemlate {
         [Parameter( Mandatory = $false, Position = 3 )]
         [string]$HTMLFile
     )
+    $cd = "<col id=`"col%num%`" />"
     $th = @"
             <th>
                 %col%
             </th>
 
 "@
-    $Header=""
+    $Header   = ""
+    $ColId    = ""
+    $ColCount = 1
     foreach ($Col in $ColNames){
-        $Header += $th.Replace("%col%", $Col)
+        $Header   += $th.Replace("%col%", $Col.Name)
+        $ColId    += $cd.Replace("%num%", $ColCount)
+        $ColCount += 1
     }
     
-    $HTMLTemplate = Get-Content $HTMLTemplateFile
+    $HTMLTemplate = (Get-Content $HTMLTemplateFile) -join "`n" 
     $HTMLTemplate = $HTMLTemplate.Replace( "%data%", $HTMLData)
     $HTMLTemplate = $HTMLTemplate.Replace( "%colnames%", $Header)
+    $HTMLTemplate = $HTMLTemplate.Replace( "%colid%", $ColId)
     if ($HTMLFile -ne "") { 
         $HTMLTemplate | Out-File $HTMLFile -Encoding utf8 -Force
     }
     return $HTMLTemplate
 }
 
-Export-ModuleMember -Function Get-NewAESKey, Get-SettingsFromFile, Get-VarFromFile, Disconnect-VPN, Connect-VPN, Add-ToLog, IsHardwareRebooting, RebootSwitches, RebootSwitchesInInterval, Get-EventList, Send-Email, StartPSScript, RestartLocalHostInInterval, ShowNotification, Get-Logger, RestartServiceInInterval, Set-TelegramMessage, InitLogging, InitVars, Get-HTMLTable, Get-Row, Get-Col, Get-ContentFromHTMLTemlate
+function Get-ErrorReporting {
+ [CmdletBinding()]
+    Param(
+        [Parameter( Mandatory = $true, Position = 0 )]
+        $Trap       
+    )
+    
+    [string]$line = $Trap.InvocationInfo.ScriptLineNumber
+    [string]$Script = $Trap.InvocationInfo.ScriptName    
+    if ($Script -ne $Trap.exception.errorrecord.InvocationInfo.ScriptName) {
+        [string]$Module = (($Trap.ScriptStackTrace).split(",")[1]).split("`n")[0].replace(" line ", "").Trim()
+        [string]$Function    = (($Trap.ScriptStackTrace).split(",")[0]).replace("at ","")
+        [string]$ToScreen    = "$Trap `n    Script:   `"$($Script):$($line)`"`n    Module:   `"$Module`"`n    Function: `"$Function`""
+        [string]$Message     = "$Trap [script] $($Script):$($line) ; $Module ; $Function"
+    }
+    else { 
+        [string]$Message = "$Trap [script] $($Script):$($line)" 
+        $ToScreen = "$Trap `n   $($Script):$($line)"
+    }
+    $Message = $Message.Replace("`n", "") 
+    $Global:Logger.AddErrorRecord( $Message )
+    Write-Host "SCRIPT EXIT DUE TO ERROR!!!" -ForegroundColor Red
+    Write-Host "==========================================================================" -ForegroundColor Red
+    Write-Host $ToScreen -ForegroundColor Blue
+}
+function Get-RowFillness {
+    [CmdletBinding()]
+    Param(
+        [Parameter( Mandatory = $false, Position = 0 )]
+        [array]$Line
+    )  
+    $FillCounter = 0
+    foreach ($col in ($Line[0].PSObject.Properties.Name )) {
+        if ($Line.$col -ne "") {
+            $FillCounter += 1
+        }
+    }
+    return $FillCounter
+}
+
+Export-ModuleMember -Function Get-NewAESKey, Get-SettingsFromFile, Get-VarFromFile, Disconnect-VPN, Connect-VPN, Add-ToLog, IsHardwareRebooting, RebootSwitches, RebootSwitchesInInterval, Get-EventList, Send-Email, StartPSScript, RestartLocalHostInInterval, ShowNotification, Get-Logger, RestartServiceInInterval, Set-TelegramMessage, InitLogging, Get-Vars, Get-HTMLTable, Get-Row, Get-Col, Get-ContentFromHTMLTemlate, Get-ErrorReporting
