@@ -814,5 +814,195 @@ function Get-RowFillness {
     }
     return $FillCounter
 }
+function Get-CopyByBITS {
+    [CmdletBinding()]
+    Param(
+        [Parameter( Mandatory = $true, Position = 0 )]
+        [string]$Source,
+        [Parameter( Mandatory = $true, Position = 1 )]
+        [string]$Destination,
+        [Parameter( Mandatory = $false, Position = 2 )]
+        [bool]$Replace,
+        [Parameter( Mandatory = $false, Position = 3)]
+        [bool]$ShowStatus = $false
+    )  
+    
+    Import-Module BitsTransfer
+    $GlobalTransfered = 0
+    $GlobalStartTime = Get-Date
+    $GlobalSize = (Get-ChildItem -Recurse $Source | Measure-Object -Property Length -Sum).sum
+    $ScreenBuffer = ""
+    $BitsJobs = @()
+    if (Test-Path $Source) {
+        if (!(Test-Path $Destination)) {
+            New-Item -Path $Destination -ItemType Directory | Out-Null
+            $ScreenBuffer += "Created directory '$Destination'`n"
+        }
+        $Files = Get-ChildItem  -Path "$Source" -Recurse
+        foreach ($item in $Files) {
+            $DestItem = $item.fullname.replace($Source, $Destination)
+            if ($item.PSIsContainer) {
+                try {
+                    if (!(Test-Path $DestItem)) {
+                        New-Item -Path $DestItem -ItemType Directory | Out-Null
+                        $ScreenBuffer += "Created directory '$Destination'`n" 
+                    } 
+                }   
+                catch {
+                    $ScreenBuffer += "Error: $_.exeption `n"
+                    Write-Host  $ScreenBuffer   
+                }            
+            }
+            Else {
+                $FileExist = Test-Path $DestItem
+                if (!($FileExist) -or $Replace) {
+                    $FileSize = [math]:: Round(($item.Length / 1Mb), 2)
+                    if ($FileExist) {
+                        $ScreenBuffer += "  - replacing file '$($DestItem) ($FileSize MB.)'`n"
+                    }
+                    Else {
+                        $ScreenBuffer += "  - copy file '$($DestItem) ($FileSize MB.)'`n"     
+                    }
+                    try {
+                        $BitsJobs += Start-BitsTransfer -Source $item.fullname -Destination $DestItem -Asynchronous -Priority Low -DisplayName $DestItem -ErrorAction SilentlyContinue  
+                    }
+                    Catch {
+                        $ScreenBuffer += "      Error: $_.exeption `n"
+                    }
+                    Clear-Host
+                    Write-Host  $ScreenBuffer 
+                }
+                Else {
+                    $ScreenBuffer += "File $DestItem already exist and replace is $replace!"
+                }
+            }
+        }
+    }
+    else {
+        Write-Host "$Source doesn't exist!"
+    }
+    if ($ShowStatus) {
+        #$BitsJobs = @(Get-BitsTransfer)
+        $CounTransferingAndConnecting = @($BitsJobs | Where-Object { $_.JobState -eq "Transferring" -or $_.JobState -eq "Connecting" }).count
+        Write-Host "$(Get-BitsTransfer | Out-String)"
+        while ( $BitsJobs.count -gt 0 -and $CounTransferingAndConnecting -gt 0) {                         
+            $FileArray = @()              
+            foreach ($BitsJob in $BitsJobs) {
+                $Status = $BitsJob.JobState
+                $File = $BitsJob.FileList[$BitsJob.FilesTransferred]
+                if ($null -ne $File) {
+                    $CurentFile = $File.localName
+                    $RemoteFile = $File.remoteName
+                    $Size = [math]:: Round(($File.BytesTotal / 1MB), 2)
+                }
+                else {
+                    $CurentFile = $BitsJob.FileList.localName
+                    $RemoteFile = $BitsJob.FileList.remoteName                                        
+                    $Size = [math]:: Round(($BitsJob.FileList.BytesTotal / 1MB), 2)
+                }
+                $FileCompletion = 0
+                switch ($Status) {
+                    { $_ -eq "Transferring" -or $_ -eq "Connecting" } {                                      
+                        $CurrentTransfered = 0            
+                        foreach ($Item in $BitsJob.FileList) {
+                            $CurrentTransfered += $Item.BytesTransferred
+                        }
 
-Export-ModuleMember -Function Get-NewAESKey, Get-SettingsFromFile, Get-VarFromFile, Disconnect-VPN, Connect-VPN, Add-ToLog, IsHardwareRebooting, RebootSwitches, RebootSwitchesInInterval, Get-EventList, Send-Email, StartPSScript, RestartLocalHostInInterval, ShowNotification, Get-Logger, RestartServiceInInterval, Set-TelegramMessage, InitLogging, Get-Vars, Get-HTMLTable, Get-Row, Get-Col, Get-ContentFromHTMLTemlate, Get-ErrorReporting
+                        $OverallCompletion = [math]:: Round(($GlobalTransfered + $CurrentTransfered) / $GlobalSize * 100, 2)
+                        try {
+                            $FileCompletion = [math]:: Round($File.BytesTransferred / $File.BytesTotal * 100, 2)
+                        }
+                        catch {
+                            $FileCompletion = 100
+                        }
+                        $SecondsRun = [math]:: Round(((Get-Date) - $GlobalStartTime).TotalSeconds, 0)
+                        if ($OverallCompletion -ne 0) {
+                            $SecondsTotal = [math]:: Round($SecondsRun / $OverallCompletion * 100, 0)
+                        }
+                        else { $SecondsTotal = 0 }
+                        $SecondsRemaining = $SecondsTotal - $SecondsRun
+                        $AproxCompliteTime = ($GlobalStartTime).AddSeconds($SecondsTotal)
+                        try {
+                            $MBSec = [math]:: Round(($GlobalTransfered + $CurrentTransfered) / 1Mb / $SecondsRun, 2)
+                        }
+                        catch {
+                            $MBSec = ""
+                        } 
+                    }
+                    "Transferred" {                                                
+                        $FileCompletion = 100                                                
+                    }
+                    "Queued" {                                                
+                        $Size = [math]:: Round(((Get-Item $RemoteFile).Length / 1Mb), 2)                                               
+                    }
+                    Default { }
+                }
+                                  
+                $PSO = [PSCustomObject]@{
+                    JobState       = $Status
+                    FileCompletion = $FileCompletion
+                    Size           = $Size
+                    RemoteFile     = $RemoteFile
+                    CurentFile     = $CurentFile
+                } 
+                $FileArray += $PSO
+            }
+            $CommonData = [PSCustomObject]@{
+                ScreenBuffer      = $ScreenBuffer
+                OverallCompletion = $OverallCompletion
+                AproxCompliteTime = $AproxCompliteTime
+                SecondsRun        = $SecondsRun
+                SecondsRemaining  = $SecondsRemaining
+                MBSec             = $MBSec
+            }                                 
+                        
+            Set-CopyStatus $CommonData $FileArray
+                                                                        
+            Start-Sleep 1
+                        
+            $CounTransferingAndConnecting = @($BitsJobs | Where-Object { $_.JobState -eq "Transferring" -or $_.JobState -eq "Connecting" }).count
+        }
+        $CommonData = [PSCustomObject]@{
+            ScreenBuffer      = $ScreenBuffer
+            OverallCompletion = 100
+            AproxCompliteTime = Get-Date
+            SecondsRun        = $SecondsRun
+            SecondsRemaining  = 0
+            MBSec             = $MBSec
+        }  
+                
+        $GlobalTransfered += $CurrentTransfered 
+        Set-CopyStatus $CommonData $null 
+    }      
+    $Uncompleted = @()
+    foreach ($job in $BitsJobs) {
+        if ($job.jobstate -eq "Transferred") {
+            try { Complete-BitsTransfer -BitsJob $job }
+            catch { Remove-BitsTransfer -BitsJob $job }
+        }
+        Else 
+        { $Uncompleted += $job }
+    }
+    if ($uncompleted.count -gt 0) {
+        Write-Host "Uncompleted job:"
+        $Uncompleted | Select-Object  ErrorDescription, TransferType, JobState, OwnerAccount, RetryInterval, ErrorCondition, DisplayName  | Format-Table -AutoSize
+    }
+    Get-BitsTransfer | Format-Table -AutoSize
+    Write-Host "Completed!"
+}
+Function Set-CopyStatus ($CommonData, $Array) {
+    Clear-Host
+    Write-Host $CommonData.ScreenBuffer
+    Write-Host "================================================================================================================================================================" -ForegroundColor Green
+    Write-Host "Overall: " -NoNewline -ForegroundColor Blue ; Write-Host "$($CommonData.OverallCompletion) % " -NoNewline -ForegroundColor Yellow; Write-Host "till: " -NoNewline -ForegroundColor Blue ; Write-Host "$($CommonData.AproxCompliteTime)" -ForegroundColor Yellow
+    Write-Host "Run: " -NoNewline -ForegroundColor Blue ; Write-Host "$($CommonData.SecondsRun) sec. " -NoNewline -ForegroundColor Yellow; Write-Host "remain: " -NoNewline -ForegroundColor Blue ; Write-Host "$($CommonData.SecondsRemaining) sec." -ForegroundColor Yellow -NoNewline ; Write-Host " speed: " -ForegroundColor Blue -NoNewline ; Write-Host "$($CommonData.MBSec) MB/sec" -ForegroundColor Yellow
+    foreach ($Pso in $Array) {     
+        if ($Pso.JobState -ne "Transferred") {
+            Write-Host "----------------------------------------------------------------------------------------------------------------------------------------------------------------" -ForegroundColor Green
+            Write-Host "    Current: " -NoNewline -ForegroundColor Blue ; Write-Host "$($PSO.FileCompletion) %" -ForegroundColor Yellow 
+            Write-Host "    $($Pso.JobState) ($($PSO.Size) MB.) " -NoNewline -ForegroundColor Blue ; Write-Host "$($PSO.RemoteFile)" -ForegroundColor Yellow -NoNewline; Write-Host " -> " -ForegroundColor Blue -NoNewline; Write-Host "$($PSO.CurentFile)" -ForegroundColor Red
+        }
+    }                                                              
+    Write-Host "================================================================================================================================================================"  -ForegroundColor Green    
+}
+Export-ModuleMember -Function Get-NewAESKey, Get-SettingsFromFile, Get-VarFromFile, Disconnect-VPN, Connect-VPN, Add-ToLog, IsHardwareRebooting, RebootSwitches, RebootSwitchesInInterval, Get-EventList, Send-Email, StartPSScript, RestartLocalHostInInterval, ShowNotification, Get-Logger, RestartServiceInInterval, Set-TelegramMessage, InitLogging, Get-Vars, Get-HTMLTable, Get-Row, Get-Col, Get-ContentFromHTMLTemlate, Get-ErrorReporting, Get-CopyByBITS
