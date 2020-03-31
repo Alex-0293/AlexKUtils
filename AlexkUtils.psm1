@@ -12,6 +12,8 @@
  .Example
    Get-NewAESKey "d:\key1.aes"
 #>
+$Global:Logger = $null
+
 function Get-NewAESKey {
     [CmdletBinding()]
     param
@@ -309,18 +311,19 @@ Function Send-Email {
         [int16]  $Cntr                = 100
     )
     
-    $emailMessage              = New-Object System.Net.Mail.MailMessage
-    $emailMessage.From         = $From
-    $emailMessage.Subject      = $Subject
-    $emailMessage.IsBodyHtml   = $HtmlBody
-    $emailMessage.Body         = $Body
-    $emailMessage.BodyEncoding = [System.Text.Encoding]::UTF8
+    $emailMessage                 = New-Object System.Net.Mail.MailMessage
+    $emailMessage.From            = $From
+    $emailMessage.Subject         = $Subject
+    $emailMessage.SubjectEncoding = [System.Text.Encoding]::UTF8
+    $emailMessage.IsBodyHtml      = $HtmlBody
+    $emailMessage.Body            = $Body
+    $emailMessage.BodyEncoding    = [System.Text.Encoding]::UTF8
     $emailMessage.To.add($To)
     
     if ("" -ne $Attachment) {
-        $Attachment = new-object Net.Mail.Attachment($Attachment)
-        $Attachment.ContentId = $AttachmentContentId
-        $emailMessage.Attachments.Add( $Attachment )
+        $Attach = new-object Net.Mail.Attachment($Attachment)
+        $Attach.ContentId = $AttachmentContentId
+        $emailMessage.Attachments.Add($Attach)
     }
       
 
@@ -348,7 +351,7 @@ Function Send-Email {
         if ($Cntr -gt 0) {
             start-sleep -Seconds 300
             $Cntr = $Cntr - 1
-            Send-Email $SmtpServer $Subject $Body $HtmlBody $User $Pass $To $Attachment $AttachmentContentId $Cntr           
+            $smtp.Send($emailMessage)        
         }  
 
     }
@@ -529,7 +532,6 @@ Function ShowNotification {
     # #get-event | Format-List -Property *
     # Wait-Event "BalloonClosed_event" -timeout $Timeout
 }
-# Фабрика логгеров "для бедных", совместимая с PowerShell v3
 function Get-Logger {
     [CmdletBinding()]
     param (
@@ -781,17 +783,18 @@ function Get-ErrorReporting {
         [Parameter( Mandatory = $true, Position = 0 )]
         $Trap       
     )
-    
-    [string]$line = $Trap.InvocationInfo.ScriptLineNumber
-    [string]$Script = $Trap.InvocationInfo.ScriptName    
+    [string]$Trap1 = $Trap
+    $Trap1 = ($Trap1.replace("[","")).replace("]","")
+    [string]$line   = $Trap.InvocationInfo.ScriptLineNumber
+    [string]$Script = $Trap.InvocationInfo.ScriptName
     if ($Script -ne $Trap.exception.errorrecord.InvocationInfo.ScriptName) {
         [string]$Module = (($Trap.ScriptStackTrace).split(",")[1]).split("`n")[0].replace(" line ", "").Trim()
         [string]$Function    = (($Trap.ScriptStackTrace).split(",")[0]).replace("at ","")
         [string]$ToScreen    = "$Trap `n    Script:   `"$($Script):$($line)`"`n    Module:   `"$Module`"`n    Function: `"$Function`""
-        [string]$Message     = "$Trap [script] $($Script):$($line) ; $Module ; $Function"
+        [string]$Message     = "$Trap1 [script] $($Script):$($line) ; $Module ; $Function"
     }
     else { 
-        [string]$Message = "$Trap [script] $($Script):$($line)" 
+        [string]$Message = "$Trap1 [script] $($Script):$($line)" 
         $ToScreen = "$Trap `n   $($Script):$($line)"
     }
     $Message = $Message.Replace("`n", "") 
