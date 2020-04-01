@@ -12,7 +12,6 @@
  .Example
    Get-NewAESKey "d:\key1.aes"
 #>
-$Global:Logger = $null
 
 function Get-NewAESKey {
     [CmdletBinding()]
@@ -639,7 +638,7 @@ function InitLogging {
     
     $ErrorFileName = "Errors.log"
     $Global:Logger = Get-Logger "$MyScriptRoot\$ErrorFileName"
-
+    Write-Debug $Global:Logger
     if (Test-Path "$MyScriptRoot\debug.txt") {
         $TranscriptPath = "$MyScriptRoot\Transcript.log"
         Start-Transcript -Path $TranscriptPath -Append -Force
