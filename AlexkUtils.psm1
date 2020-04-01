@@ -307,7 +307,8 @@ Function Send-Email {
         [bool]   $SSL                 = $True,
         [string] $Attachment          = "",
         [string] $AttachmentContentId = "",
-        [int16]  $Cntr                = 100
+        [int16]  $Cntr                = 100,
+        [int16]  $PauseBetweenTryes   = 30
     )
     
     $emailMessage                 = New-Object System.Net.Mail.MailMessage
@@ -345,12 +346,33 @@ Function Send-Email {
         $smtp.Send($emailMessage)  
     }
     catch {
-        Get-ErrorReporting $_  
+        #Get-ErrorReporting $_  
         write-host "Send-Email exeption $($_.Exception)"        
         if ($Cntr -gt 0) {
-            start-sleep -Seconds 300
+            
             $Cntr = $Cntr - 1
-            $smtp.Send($emailMessage)        
+            Write-host ""
+            Write-host "$(get-date) Try $Cntr"
+            Start-Sleep -Seconds $PauseBetweenTryes
+            
+            $params = @{
+                SmtpServer          = $SmtpServer
+                Subject             = $Subject
+                Body                = $Body
+                HtmlBody            = $HtmlBody
+                User                = $User
+                Pass                = $Pass
+                From                = $From
+                To                  = $To
+                Port                = $Port
+                SSL                 = $SSL
+                Attachment          = $Attachment
+                AttachmentContentId = $AttachmentContentId
+                Cntr                = $Cntr
+                PauseBetweenTryes   = $PauseBetweenTryes  
+            }
+
+            Send-Email @params     
         }  
 
     }
