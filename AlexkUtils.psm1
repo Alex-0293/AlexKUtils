@@ -819,6 +819,7 @@ function Get-ErrorReporting {
         $ToScreen = "$Trap `n   $($Script):$($line)"
     }
     $Message = $Message.Replace("`n", "") 
+    $Message = $Message.Replace("`n`r", "")
     $Global:Logger.AddErrorRecord( $Message )
     Write-Host "SCRIPT EXIT DUE TO ERROR!!!" -ForegroundColor Red
     Write-Host "==========================================================================" -ForegroundColor Red
