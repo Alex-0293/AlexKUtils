@@ -231,12 +231,12 @@ Function IsHardwareRebooting {
         [string] $HardwareRebootStartTime,
         [string] $HardwareRebootEndTime
     ) 
-    $CHour = [int](Get-date -Format "%H")
-    $CMin = [int](Get-date -Format "%m")
+    $CHour     = [int](Get-date -Format "%H")
+    $CMin      = [int](Get-date -Format "%m")
     $StartHour = [int]($HardwareRebootStartTime -split ":")[0]
-    $StartMin = [int]($HardwareRebootStartTime -split ":")[1]
-    $EndHour = [int]($HardwareRebootEndTime -split ":")[0]
-    $EndMin = [int]($HardwareRebootEndTime -split ":")[1]
+    $StartMin  = [int]($HardwareRebootStartTime -split ":")[1]
+    $EndHour   = [int]($HardwareRebootEndTime -split ":")[0]
+    $EndMin    = [int]($HardwareRebootEndTime -split ":")[1]
     if ($CHour -ge $StartHour -and $CHour -le $EndHour) {
         if ($CMin -ge $StartMin -and $CMin -le $EndMin) {
             return $True
@@ -846,7 +846,7 @@ function Get-CopyByBITS {
         [Parameter( Mandatory = $true, Position = 1 )]
         [string]$Destination,
         [Parameter( Mandatory = $false, Position = 2 )]
-        [bool]$Replace,
+        [bool]$Replace = $false,
         [Parameter( Mandatory = $false, Position = 3)]
         [bool]$ShowStatus = $false
     )  
@@ -959,6 +959,7 @@ function Get-CopyByBITS {
                     "Queued" {                                                
                         $Size = [math]:: Round(((Get-Item $RemoteFile).Length / 1Mb), 2)                                               
                     }
+
                     Default { }
                 }
                                   
@@ -1029,4 +1030,67 @@ Function Set-CopyStatus ($CommonData, $Array) {
     }                                                              
     Write-Host "================================================================================================================================================================"  -ForegroundColor Green    
 }
-Export-ModuleMember -Function Get-NewAESKey, Get-SettingsFromFile, Get-VarFromFile, Disconnect-VPN, Connect-VPN, Add-ToLog, IsHardwareRebooting, RebootSwitches, RebootSwitchesInInterval, Get-EventList, Send-Email, StartPSScript, RestartLocalHostInInterval, ShowNotification, Get-Logger, RestartServiceInInterval, Set-TelegramMessage, InitLogging, Get-Vars, Get-HTMLTable, Get-Row, Get-Col, Get-ContentFromHTMLTemlate, Get-ErrorReporting, Get-CopyByBITS
+Function Get-OpenDialog{
+[CmdletBinding()]
+    Param(        
+        [Parameter( Mandatory = $true, Position = 0)]
+        [string]$Type,
+        [Parameter( Mandatory = $false, Position = 1 )]
+        [string]$InitPath = "",
+        [Parameter( Mandatory = $false, Position = 2 )]
+        [string]$Description = "",
+        [Parameter( Mandatory = $false, Position = 3 )]
+        [string]$FileFilter = "",
+        [Parameter( Mandatory = $false, Position = 4 )]
+        [bool]$FileMultiSelect = $false
+    )  
+    
+    Add-Type -AssemblyName System.Windows.Forms
+    if ($InitPath -eq "") {$InitPath = Get-Location}
+    switch ($type.tolower()) {
+        "file" { 
+            $File                  = New-Object Windows.Forms.OpenFileDialog
+            $File.InitialDirectory = $InitPath
+            $File.Filter           = $FileFilter
+            $File.ShowHelp         = $true
+            $File.Multiselect      = $FileMultiSelect
+            $File.ShowDialog() | Out-Null
+            if ($File.Multiselect) { return $File.FileNames } else { return $File.FileName }  
+        }
+        "folder" {  
+            $Folder = New-Object Windows.Forms.FolderBrowserDialog
+            $Folder.SelectedPath = $InitPath
+            $Folder.ShowDialog() | Out-Null
+            return $Folder.SelectedPath 
+        }
+        Default {}
+    }
+}
+function Import-ModuleRemotely {
+    [CmdletBinding()]    
+    Param (
+        [Parameter( Mandatory = $true, Position = 0)]
+        [string] $moduleName,
+        [Parameter( Mandatory = $true, Position = 1)]
+        [System.Management.Automation.Runspaces.PSSession] $session
+    )
+
+    Import-Module $moduleName
+
+    $Script = @"
+    if (get-module $moduleName)
+    {
+        remove-module $moduleName;
+    }
+
+    New-Module -Name $moduleName { $($(Get-Module $moduleName).Definition) } | Import-Module
+"@
+
+    Invoke-Command -Session $Session -ScriptBlock {
+        Param($Script)
+        . ([ScriptBlock]::Create($Script))
+        Get-Module 
+    } -ArgumentList $Script
+}
+
+Export-ModuleMember -Function Get-NewAESKey, Get-SettingsFromFile, Get-VarFromFile, Disconnect-VPN, Connect-VPN, Add-ToLog, IsHardwareRebooting, RebootSwitches, RebootSwitchesInInterval, Get-EventList, Send-Email, StartPSScript, RestartLocalHostInInterval, ShowNotification, Get-Logger, RestartServiceInInterval, Set-TelegramMessage, InitLogging, Get-Vars, Get-HTMLTable, Get-Row, Get-Col, Get-ContentFromHTMLTemlate, Get-ErrorReporting, Get-CopyByBITS, Get-OpenDialog, Import-ModuleRemotely
