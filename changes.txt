@@ -1,0 +1,48 @@
+(Changed function names)
+(previous name)						(new name)
+Get-SettingsFromFile                Import-SettingsFromFile
+ReplaceVars                         Initialize-Vars
+Get-VarFromFile 					Get-VarFromAESFile
+Set-VarToFile 						Set-VarToAESFile
+RebootSwitches 						Restart-Switches
+StartPSScript 						Start-PSScript
+RebootSwitchesInInterval 			Restart-SwitchInInterval
+RestartLocalHostInInterval 			Restart-LocalHostInInterval
+ShowNotification 					Show-Notification
+RestartServiceInInterval 			Restart-ServiceInInterval
+InitLogging 						Initialize-Logging
+Get-Vars 							Get-VarsFromFile
+Get-Row 							Get-HTMLRow
+Get-Col 							Get-HTMLCol
+Get-RowFullness 					Get-HTMLRowFullness
+Set-CopyStatus 						Show-CopyStatus
+Get-OpenDialog 						Show-OpenDialog
+Get-ContentFromHTMLTemlate          Get-ContentFromHTMLTemplate
+(removed functions)
+IsHardwareRebooting
+
+
+(Data types)
+[switch]
+
+Send-Email
+	$HtmlBody
+	$SSL
+
+Start-PSScript
+	$Elevated 
+
+Get-CopyByBITS
+	$Replace
+	$ShowStatus
+
+Show-OpenDialog
+	$FileMultiSelect
+
+(changed params order or number)
+Restart-SwitchInInterval
+Restart-ServiceInInterval
+Set-TelegramMessage
+
+(changed params names)
+Pass Password

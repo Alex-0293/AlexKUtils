@@ -22,7 +22,7 @@
     $AESKey | out-file $AESKeyFilePath
 }    
 Function Import-SettingsFromFile {
-#Get-SettingsFromFile
+    #Get-SettingsFromFile
 <#
     .SYNOPSIS 
         .AUTHOR Alexk
@@ -114,10 +114,8 @@ Function Get-VarFromAESFile  {
      
     if ($VarFilePathExist -and $AESKeyFilePathExist) {
             try {
-                $Var = Get-Content $VarFilePath | ConvertTo-SecureString -Key (get-content $AESKeyFilePath) 
-                #$Var = [System.Runtime.InteropServices.Marshal]::SecureStringToBSTR($Var)
-                #$Var = [System.Runtime.InteropServices.Marshal]::PtrToStringAuto($Var)
-                return $Var
+                $Res = Get-Content $VarFilePath | ConvertTo-SecureString -Key (get-content $AESKeyFilePath)                
+                return $Res
             }
             Catch {
                 write-host "Error, check your key"
@@ -156,6 +154,30 @@ Function Set-VarToAESFile {
     
     
     ConvertTo-SecureString $Var -AsPlainText | ConvertFrom-SecureString -Key (get-content $AESKeyFilePath) | Set-Content $VarFilePath
+}
+Function Get-VarToString {
+<#
+    .SYNOPSIS 
+        .AUTHOR Alexk
+        .DATE 09.04.2020
+        .VER 1   
+    .DESCRIPTION
+     Function to make string from secure string.
+    .EXAMPLE
+    Get-VarToString -Var $Var
+#>   
+    [CmdletBinding()]  
+    param
+    (
+        [Parameter(Mandatory = $true, Position = 0, HelpMessage = "Secure string." )]
+        [ValidateNotNullOrEmpty()]
+        $Var
+    )
+    
+    $Var = [System.Runtime.InteropServices.Marshal]::SecureStringToBSTR($Var)
+    $Res = [System.Runtime.InteropServices.Marshal]::PtrToStringAuto($Var)
+
+    return $Res
 }
 Function Add-ToLog {
 <#
@@ -252,7 +274,7 @@ Function Connect-VPN {
         [securestring] $Password
     )   
     Add-ToLog "Try to connect VPN - $VPNConnectionName under $Login" $logFilePath
-    $Res = & rasdial $VPNConnectionName  $Login ( ConvertFrom-SecureString $Password -AsPlainText )
+    $Res = & rasdial $VPNConnectionName  $Login ( Get-VarToString $Password)
     if (($Res -like "*success*") -or ($Res -like "*успешно*")) {
         Add-ToLog $Res $logFilePath
         return $true         
@@ -339,11 +361,10 @@ Function Get-EventList {
         [Parameter(Mandatory = $true, Position = 0, HelpMessage = "Log file path." )]
         [ValidateNotNullOrEmpty()] 
         [string] $LogFilePath,
-        [Parameter(Mandatory = $true, Position = 1, HelpMessage = "Event string." )]
-        [ValidateNotNullOrEmpty()] 
+        [Parameter(Mandatory = $false, Position = 1, HelpMessage = "Event string." )]
         [string] $Event,
         [Parameter(Mandatory = $false, Position = 2, HelpMessage = "Time interval in seconds." )]
-        [int16] $Interval = 0
+        [int32] $Interval = 0
     )
     $Res = @()
     $Log = Get-Content $LogFilePath -Encoding UTF8
@@ -406,7 +427,7 @@ Function Send-Email {
         [Parameter(Mandatory = $false, Position = 3, HelpMessage = "Email body type." )]
         [switch]   $HtmlBody,
         [Parameter(Mandatory = $false, Position = 4, HelpMessage = "User name.", ParameterSetName = "Auth" )]
-        [string] $User = "",
+        [securestring] $User = "",
         [Parameter(Mandatory = $false, Position = 5, HelpMessage = "User password.", ParameterSetName = "Auth" )]
         [securestring] $Password = "",
         [Parameter(Mandatory = $true, Position = 6, HelpMessage = "From address." )]
@@ -445,7 +466,7 @@ Function Send-Email {
     }
       
 
-    $smtp = New-Object net.mail.smtpclient($SmtpServer, $Port)
+    $smtp = New-Object net.mail.SMTPClient($SmtpServer, $Port)
     if ($SSL){
         try {
             if ([Net.ServicePointManager]::SecurityProtocol -notcontains 'Tls12') {
@@ -458,14 +479,14 @@ Function Send-Email {
         $smtp.EnableSSL = $SSL
     }
     if ($user -ne "") {
-        $smtp.Credentials = New-Object System.Net.NetworkCredential($user, ( ConvertFrom-SecureString $Password -AsPlainText ))
+        $smtp.Credentials = New-Object System.Net.NetworkCredential((Get-VarToString $user), (Get-VarToString $Password))
     }
     try {
         $smtp.Send($emailMessage)  
     }
     catch {
         #Get-ErrorReporting $_  
-        write-host "Send-Email exception $($_.Exception)"        
+        write-host "Send-Email exception $($_.Exception)" -foreground red         
         if ($Counter -gt 0) {
             
             $Counter = $Counter - 1
@@ -613,7 +634,7 @@ Function Restart-SwitchInInterval {
         [int16]  $MinIntervalBetweenReboots
     )
     foreach ($switch in $SwitchesIP) {
-        $Event = "Start switch reboot $($switch.switchip)"
+        $Event = "Start switch reboot $($switch.SwitchIp)"
         $EventList = Get-EventList $logFilePath $Event
         
         
@@ -1137,7 +1158,7 @@ function Get-ErrorReporting {
 
     [string]$Trace      = $UpDownStackTrace | ForEach-Object { ((($_ -replace "`n", "`n    ") -replace " line ", "") -replace "at ", "") -replace "<ScriptBlock>", "ScriptBlock"  }
     [string]$Trace1     = $UpDownStackTrace | ForEach-Object { ((($_ -replace "`n", "`n ") -replace " line ", "") -replace "at ", "") -replace "<ScriptBlock>", "ScriptBlock" }
-    if ($Script -ne $Trap.exception.errorrecord.InvocationInfo.ScriptName) {
+    if ($Script -ne $Trap.Exception.ErrorRecord.InvocationInfo.ScriptName) {
         [string]$Module = (($Trap.ScriptStackTrace).split(",")[1]).split("`n")[0].replace(" line ", "").Trim()
         [string]$Function    = (($Trap.ScriptStackTrace).split(",")[0]).replace("at ","")
         [string]$ToScreen    = "$Trap `n    Script:   `"$($Script):$($line)`"`n    Module:   `"$Module`"`n    Function: `"$Function`""
@@ -1153,7 +1174,7 @@ function Get-ErrorReporting {
         $ToScreen = "$Trap `n   $($Script):$($line)"
     }
  
-    $Message = $Message.Replace("`n", "") 
+    $Message = $Message.Replace("`n", "|") 
     $Message = $Message.Replace("`r", "")
     $Global:Logger.AddErrorRecord( $Message )
 
@@ -1672,4 +1693,4 @@ Function Set-PSModuleManifest {
     New-ModuleManifest -Path $ModulePath -ModuleVersion $ModuleVersion  -Author $Author -PowerShellVersion $PowerShellVersion -ClrVersion $CLRVersion  -DotNetFrameworkVersion $DotNetFrameworkVersion -FunctionsToExport $ExportedFunctions -RootModule $RootModule
 }
 
-Export-ModuleMember -Function Get-NewAESKey, Import-SettingsFromFile, Get-VarFromAESFile, Set-VarToAESFile, Disconnect-VPN, Connect-VPN, Add-ToLog, Restart-Switches, Restart-SwitchInInterval, Get-EventList, Send-Email, Start-PSScript, Restart-LocalHostInInterval, Show-Notification, Get-Logger, Restart-ServiceInInterval, Set-TelegramMessage, Initialize-Logging, Get-VarsFromFile, Get-HTMLTable, Get-HTMLCol, Get-ContentFromHTMLTemplate, Get-ErrorReporting, Get-CopyByBITS, Show-OpenDialog, Import-ModuleRemotely, Invoke-PSScriptBlock, Get-ACLArray, Set-PSModuleManifest
+Export-ModuleMember -Function Get-NewAESKey, Import-SettingsFromFile, Get-VarFromAESFile, Set-VarToAESFile, Disconnect-VPN, Connect-VPN, Add-ToLog, Restart-Switches, Restart-SwitchInInterval, Get-EventList, Send-Email, Start-PSScript, Restart-LocalHostInInterval, Show-Notification, Get-Logger, Restart-ServiceInInterval, Set-TelegramMessage, Initialize-Logging, Get-VarsFromFile, Get-HTMLTable, Get-HTMLCol, Get-ContentFromHTMLTemplate, Get-ErrorReporting, Get-CopyByBITS, Show-OpenDialog, Import-ModuleRemotely, Invoke-PSScriptBlock, Get-ACLArray, Set-PSModuleManifest, Get-VarToString

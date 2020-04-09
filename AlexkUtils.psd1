@@ -33,7 +33,7 @@ Copyright = '(c) AlexK (1928311@tuta.io). All rights reserved.'
 # Description = ''
 
 # Minimum version of the PowerShell engine required by this module
-PowerShellVersion = '7.0.0'
+PowerShellVersion = '5.1.0'
 
 # Name of the PowerShell host required by this module
 # PowerShellHostName = ''
@@ -69,17 +69,7 @@ PowerShellVersion = '7.0.0'
 # NestedModules = @()
 
 # Functions to export from this module, for best performance, do not use wildcards and do not delete the entry, use an empty array if there are no functions to export.
-FunctionsToExport = 'Get-NewAESKey', 'Import-SettingsFromFile', 'Get-VarFromAESFile', 
-               'Set-VarToAESFile', 'Disconnect-VPN', 'Connect-VPN', 'Add-ToLog', 
-               'Restart-Switches', 'Restart-SwitchInInterval', 'Get-EventList', 
-               'Send-Email', 'Start-PSScript', 'Restart-LocalHostInInterval', 
-               'Show-Notification', 'Get-Logger', 'Restart-ServiceInInterval', 
-               'Set-TelegramMessage', 'Initialize-Logging', 'Get-VarsFromFile', 
-               'Get-HTMLTable', 'Get-HTMLCol', 'Get-ContentFromHTMLTemplate', 
-               'Get-ErrorReporting', 'Get-CopyByBITS', 'Show-OpenDialog', 
-               'Import-ModuleRemotely', 'Invoke-PSScriptBlock', 'Get-ACLArray', 
-               'Set-PSModuleManifest'
-
+FunctionsToExport = '*'
 # Cmdlets to export from this module, for best performance, do not use wildcards and do not delete the entry, use an empty array if there are no cmdlets to export.
 CmdletsToExport = '*'
 
