@@ -316,32 +316,33 @@ Function Restart-Switches {
         [ValidateNotNullOrEmpty()] 
         [string] $SshCommand,
         [Parameter(Mandatory = $false, Position = 5, HelpMessage = "SSH Login.", ParameterSetName = "Login" )]     
-        [string] $Login = "",
+        [string] $Login,
         [Parameter(Mandatory = $false, Position = 6, HelpMessage = "SSH Password.", ParameterSetName = "Login" )]
-        [securestring] $Password = "",
+        [securestring] $Password,
         [Parameter(Mandatory = $false, Position = 7, HelpMessage = "SSH certificate path.", ParameterSetName = "Cert" )]
-        [string] $CertFilePath = ""
+        [string] $CertFilePath
     ) 
     Foreach ($Item in $SwitchesIP) {
         $Ip = $Item.SwitchIp
         $Command = $SshCommand.Clone()
         $Command = $Command.Replace("%ip%", $Ip)
 
-        if (("" -eq $Login) -and ("" -eq $Password) -and ("" -ne $CertFilePath) -and ("" -ne $SshConString) -and ("" -ne $SshCommand)) {
+        if (!$Login -and $CertFilePath -and $SshConString -and $SshCommand) {
             $Arguments = " -ssh -i """ + $CertFilePath + """ " + $SshConString + " -no-antispoof """ + $Command + """ -batch"
             #Add-ToLog "$Arguments" $logFilePath 
             Start-Process $PLinkPath -ArgumentList $Arguments -WindowStyle Hidden #-RedirectStandardOutput "C:\DATA\PROJECTS\RebootUnpingableClientSwitch\ssh-out.log" #
             Add-ToLog "Start switch reboot $Ip" $logFilePath 
         }
-        elseif (("" -ne $Login) -and ("" -eq $CertFilePath) -and ("" -ne $SshConString) -and ("" -ne $SshCommand)) {
+
+        elseif ($Login -and !$CertFilePath -and $SshConString -and $SshCommand) {
             $Arguments = " -ssh -l """ + $Login + """ -pw """ + $Password + """ " + $SshConString + " -no-antispoof """ + $Command + """ -batch"
             Start-Process $PLinkPath -ArgumentList $Arguments -WindowStyle Hidden   #-RedirectStandardOutput "C:\DATA\PROJECTS\RebootUnpingableClientSwitch\ssh-out.log" #
             Add-ToLog "Start switch reboot $Ip" $logFilePath  
         } 
+
         switch ($Item.RebootOrder) {
             2 { Start-Sleep 10 }
             3 { Start-Sleep 10 }
-            
         }
     }
 }
@@ -420,33 +421,33 @@ Function Send-Email {
         [Parameter(Mandatory = $true, Position = 0, HelpMessage = "SMTP server FQDN." )]
         [ValidateNotNullOrEmpty()]
         [string] $SmtpServer,
-        [Parameter(Mandatory = $false, Position = 1, HelpMessage = "Email subject." )]
-        [string] $Subject,
-        [Parameter(Mandatory = $false, Position = 2, HelpMessage = "Email body." )]
-        [string] $Body = "",
-        [Parameter(Mandatory = $false, Position = 3, HelpMessage = "Email body type." )]
-        [switch]   $HtmlBody,
-        [Parameter(Mandatory = $false, Position = 4, HelpMessage = "User name.", ParameterSetName = "Auth" )]
-        [securestring] $User = "",
-        [Parameter(Mandatory = $false, Position = 5, HelpMessage = "User password.", ParameterSetName = "Auth" )]
-        [securestring] $Password = "",
-        [Parameter(Mandatory = $true, Position = 6, HelpMessage = "From address." )]
+        [Parameter(Mandatory = $true, Position = 1, HelpMessage = "From address." )]
         [ValidateNotNullOrEmpty()]
         [string] $From,
-        [Parameter(Mandatory = $true, Position = 6, HelpMessage = "To address." )]
+        [Parameter(Mandatory = $true, Position = 2, HelpMessage = "To address." )]
         [ValidateNotNullOrEmpty()]
         [string] $To, 
-        [Parameter(Mandatory = $false, Position = 7, HelpMessage = "SMTP port." )]
+        [Parameter(Mandatory = $false, Position = 3, HelpMessage = "Email subject." )]
+        [string] $Subject,
+        [Parameter(Mandatory = $false, Position = 4, HelpMessage = "Email body." )]
+        [string] $Body,
+        [Parameter(Mandatory = $false, Position = 5, HelpMessage = "Email body type." )]
+        [switch]   $HtmlBody,
+        [Parameter(Mandatory = $false, Position = 6, HelpMessage = "User name.", ParameterSetName = "Auth" )]
+        [securestring] $User,
+        [Parameter(Mandatory = $false, Position = 7, HelpMessage = "User password.", ParameterSetName = "Auth" )]
+        [securestring] $Password,        
+        [Parameter(Mandatory = $false, Position = 8, HelpMessage = "SMTP port." )]
         [int16]  $Port                = 25,
-        [Parameter(Mandatory = $false, Position = 8, HelpMessage = "Use SSL." )]
+        [Parameter(Mandatory = $false, Position = 9, HelpMessage = "Use SSL." )]
         [switch]   $SSL,
-        [Parameter(Mandatory = $false, Position = 9, HelpMessage = "Email attachment." )]
-        [string] $Attachment          = "",
-        [Parameter(Mandatory = $false, Position = 10, HelpMessage = "Email attachment content id." )]
-        [string] $AttachmentContentId = "",
-        [Parameter(Mandatory = $false, Position = 11, HelpMessage = "Retry counter." )]
+        [Parameter(Mandatory = $false, Position = 10, HelpMessage = "Email attachment." )]
+        [string] $Attachment,
+        [Parameter(Mandatory = $false, Position = 11, HelpMessage = "Email attachment content id." )]
+        [string] $AttachmentContentId,
+        [Parameter(Mandatory = $false, Position = 12, HelpMessage = "Retry counter." )]
         [int16]  $Counter             = 100,
-        [Parameter(Mandatory = $false, Position = 12, HelpMessage = "Pause between retries in seconds." )]
+        [Parameter(Mandatory = $false, Position = 13, HelpMessage = "Pause between retries in seconds." )]
         [int16]  $PauseBetweenTries   = 30
     )
     
@@ -459,7 +460,7 @@ Function Send-Email {
     $emailMessage.BodyEncoding    = [System.Text.Encoding]::UTF8
     $emailMessage.To.add($To)
     
-    if ("" -ne $Attachment) {
+    if ($Attachment) {
         $Attach = new-object Net.Mail.Attachment($Attachment)
         $Attach.ContentId = $AttachmentContentId
         $emailMessage.Attachments.Add($Attach)
@@ -470,7 +471,7 @@ Function Send-Email {
     if ($SSL){
         try {
             if ([Net.ServicePointManager]::SecurityProtocol -notcontains 'Tls12') {
-                [Net.ServicePointManager]::SecurityProtocol += [Net.SecurityProtocolType]::Tls12
+                [Net.ServicePointManager]::SecurityProtocol +=  [Net.SecurityProtocolType]::Tls12
             }
         }
         Catch {}
@@ -478,7 +479,7 @@ Function Send-Email {
         #[System.Net.ServicePointManager]::CertificatePolicy = 
         $smtp.EnableSSL = $SSL
     }
-    if ($user -ne "") {
+    if ($user) {
         $smtp.Credentials = New-Object System.Net.NetworkCredential((Get-VarToString $user), (Get-VarToString $Password))
     }
     try {
@@ -534,51 +535,42 @@ Function Start-PSScript {
         [ValidateNotNullOrEmpty()]
         [string] $ScriptPath,
         [Parameter(Mandatory = $false, Position = 1, HelpMessage = "Command to execute." )]
-        [string] $PSCommand = "",
-        [Parameter(Mandatory = $false, Position = 2, HelpMessage = "User name." )]
-        [string] $Username = "",
-        [Parameter(Mandatory = $false, Position = 3, HelpMessage = "Password." )]
-        [securestring] $Password = "",
+        [string] $PSCommand,
+        [Parameter(Mandatory = $false, Position = 2, HelpMessage = "Credentials." )]
+        [System.Management.Automation.PSCredential]  $Credentials, 
         [Parameter(Mandatory = $true, Position = 4, HelpMessage = "Log file path." )]
         [ValidateNotNullOrEmpty()] 
         [string] $logFilePath,
         [Parameter(Mandatory = $false, Position = 5, HelpMessage = "Output file path." )]
-        [string] $OutputFilePath = "",
+        [string] $OutputFilePath,
         [Parameter(Mandatory = $false, Position = 5, HelpMessage = "Use elevated rights." )]
         [switch]   $Elevated        
     )
     $PowerShellPrgPath = "C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe"
-    if ($PSCommand -eq "") {
+    if (!$PSCommand) {
         $Arguments = "-WindowStyle Hidden -NonInteractive -Executionpolicy unrestricted  -file ""$ScriptPath""" 
     }
     else {
         $Arguments = "-NoNewWindow -WindowStyle Hidden -NonInteractive -Executionpolicy unrestricted -Command  ""& {$PSCommand}"""
     }
      
-    switch ($Elevated) {
-        $True { $Arguments += " -Verb runas" }
-        Default { }
+    if ($Elevated) {
+        $Arguments += " -Verb runas" 
     }
-    switch ($Username) {
-        "" { }
-        Default {
-            $Credential = New-Object System.Management.Automation.PSCredential( $Username, $Password)
-        }
+   
+    if ($OutputFilePath) {
+        $Arguments += " -RedirectStandardOutput ""$OutputFilePath""" 
     }
-    switch ($OutputFilePath) {
-        "" { }
-        Default { $Arguments += " -RedirectStandardOutput ""$OutputFilePath""" }
-    }
-    if ($PSCommand -eq "") {
+    if (!$PSCommand) {
         $PossibleToStart = $True
-        if ($Elevated -eq $true -and ("" -ne $Username -or "" -ne $OutputFilePath )) {
+        if ($Elevated -and (($Credentials) -or ($OutputFilePath) )) {
             $PossibleToStart = $false
             write-host ("Cannot run script with elevated and (credentials or output redirect)!")
         }
 
-        if ($PossibleToStart -eq $true) {
+        if ($PossibleToStart) {
             Add-ToLog "Start script  $ScriptPath" $logFilePath 
-            if ($username -ne "") {
+            if ($Credentials) {
                 Start-Process $PowerShellPrgPath -ArgumentList $Arguments -Credential $Credential
             }  
             Else {
@@ -587,7 +579,7 @@ Function Start-PSScript {
         }
     }
     else {
-        if ($username -ne "") {
+        if ($Credentials) {
             Start-Process $PowerShellPrgPath -ArgumentList $Arguments -Credential $Credential
         }  
         Else {
@@ -625,11 +617,11 @@ Function Restart-SwitchInInterval {
         [ValidateNotNullOrEmpty()] 
         [string] $SshCommand,
         [Parameter(Mandatory = $false, Position = 5, HelpMessage = "SSH Login.", ParameterSetName = "Login" )]     
-        [string] $Login = "",
+        [string] $Login,
         [Parameter(Mandatory = $false, Position = 6, HelpMessage = "SSH Password.", ParameterSetName = "Login" )]
-        [securestring] $Password = "",
+        [securestring] $Password,
         [Parameter(Mandatory = $false, Position = 7, HelpMessage = "SSH certificate path.", ParameterSetName = "Cert" )]
-        [string] $CertFilePath = "",
+        [string] $CertFilePath,
         [Parameter(Mandatory = $false, Position = 8, HelpMessage = "Minimal interval between restarts." )]
         [int16]  $MinIntervalBetweenReboots
     )
@@ -656,7 +648,7 @@ Function Restart-SwitchInInterval {
         Else {
             #Add-ToLog $Event $EventLogPath
             RebootSwitches $Switch $EventLogPath $PlinkPath $SshConString $SshCommand $Null $Null $CertFilePath
-            ShowNotification "RebootSwitchesInInterval" "Try to reboot switch $($Switch.switchip)!" "Info" "C:\DATA\PROJECTS\ConnectVPN\VPN.log" 10
+            ShowNotification "RebootSwitchesInInterval" "Try to reboot switch $($Switch.SwitchIp)!" "Info" "C:\DATA\PROJECTS\ConnectVPN\VPN.log" 10
         } 
     }
 }
@@ -1454,26 +1446,26 @@ Function Show-OpenDialog{
         [ValidateSet("folder", "file")]
         [string]$Type,
         [Parameter( Mandatory = $false, Position = 1, HelpMessage = "Initial dialog path." )]
-        [string]$InitPath = "",
+        [string]$InitPath,
         [Parameter( Mandatory = $false, Position = 2, HelpMessage = "Dialog description." )]
-        [string]$Description = "",
+        [string]$Description,
         [Parameter( Mandatory = $false, Position = 3, HelpMessage = "File filter." )]
-        [string]$FileFilter = "",
-        [Parameter( Mandatory = $false, Position = 4, HelpMessage = "Allow multiselect." )]
-        [switch]$FileMultiSelect = $false
+        [string]$FileFilter,
+        [Parameter( Mandatory = $false, Position = 4, HelpMessage = "Allow multi select." )]
+        [switch]$FileMultiSelect
     )  
     
     Add-Type -AssemblyName System.Windows.Forms
-    if ($InitPath -eq "") {$InitPath = Get-Location}
+    if (!$InitPath) {$InitPath = Get-Location}
     switch ($type.tolower()) {
         "file" { 
             $File                  = New-Object Windows.Forms.OpenFileDialog
             $File.InitialDirectory = $InitPath
             $File.Filter           = $FileFilter
             $File.ShowHelp         = $true
-            $File.Multiselect      = $FileMultiSelect
+            $File.MultiSelect      = $FileMultiSelect
             $File.ShowDialog() | Out-Null
-            if ($File.Multiselect) { return $File.FileNames } else { return $File.FileName }  
+            if ($File.MultiSelect) { return $File.FileNames } else { return $File.FileName }  
         }
         "folder" {  
             $Folder = New-Object Windows.Forms.FolderBrowserDialog
@@ -1692,5 +1684,86 @@ Function Set-PSModuleManifest {
 
     New-ModuleManifest -Path $ModulePath -ModuleVersion $ModuleVersion  -Author $Author -PowerShellVersion $PowerShellVersion -ClrVersion $CLRVersion  -DotNetFrameworkVersion $DotNetFrameworkVersion -FunctionsToExport $ExportedFunctions -RootModule $RootModule
 }
+function Get-UniqueArrayMembers {
+    <#
+    .SYNOPSIS 
+        .AUTHOR Alexk
+        .DATE 10.04.2020
+        .VER 1   
+    .DESCRIPTION
+     Return row with unique elements in column.
+    .EXAMPLE
+    Get-UniqueArrayMembers -Array $Array -ColumnName $ColumnName
+#>    
+    [CmdletBinding()]   
+    Param(
+        [Parameter( Mandatory = $true, Position = 0, HelpMessage = "Data array." )]
+        [ValidateNotNullOrEmpty()]
+        [array] $Array,    
+        [Parameter( Mandatory = $true, Position = 1, HelpMessage = "Array column name." )]
+        [string] $ColumnName
+    )
+    [array]$ColumnData = @()
+    [array]$Res = @()
+    foreach ($item in $array) {
+        if ($ColumnData -notcontains $item.$ColumnName -and ($item.$ColumnName)) {
+            $ColumnData += $item.$ColumnName
+            $Res += $item
+        }   
+    }
+    return $Res
+}
+function Resolve-IPtoFQDNinArray {
+    <#
+    .SYNOPSIS 
+        .AUTHOR Alexk
+        .DATE 10.04.2020
+        .VER 1   
+    .DESCRIPTION
+     Add FQDN column to IP array.
+    .EXAMPLE
+    Resolve-IPtoFQDNinArray -Array $Array
+    #>    
+    [CmdletBinding()]   
+    Param(
+        [Parameter( Mandatory = $true, Position = 0, HelpMessage = "Data array with uniq IP column." )]
+        [ValidateNotNullOrEmpty()]
+        [array] $Array
+    )
 
-Export-ModuleMember -Function Get-NewAESKey, Import-SettingsFromFile, Get-VarFromAESFile, Set-VarToAESFile, Disconnect-VPN, Connect-VPN, Add-ToLog, Restart-Switches, Restart-SwitchInInterval, Get-EventList, Send-Email, Start-PSScript, Restart-LocalHostInInterval, Show-Notification, Get-Logger, Restart-ServiceInInterval, Set-TelegramMessage, Initialize-Logging, Get-VarsFromFile, Get-HTMLTable, Get-HTMLCol, Get-ContentFromHTMLTemplate, Get-ErrorReporting, Get-CopyByBITS, Show-OpenDialog, Import-ModuleRemotely, Invoke-PSScriptBlock, Get-ACLArray, Set-PSModuleManifest, Get-VarToString
+    [datetime]$lastSeen = Get-Date
+    [array]   $Res = @()
+    foreach ($item in $Array) {
+        $Ip = $Item | Select-Object -ExpandProperty *
+        try {
+            $FQDN     = [System.Net.Dns]::GetHostEntry($Ip).HostName
+            $Domen    = ($FQDN.split(".") | Select-Object -last  2) -join "."
+            $HostName = ($FQDN.split(".") | Select-Object -first 1)
+        }
+        catch { 
+            $Err = $_.Exception.InnerException.ErrorCode
+            switch ($Err) {
+                11001   {$FQDN = "Unknown"  } 
+                10060   {$FQDN = "Timeout"  }
+                11002   {$FQDN = "TempError"}               
+                Default {
+                    $FQDN = "Error" 
+                }
+            } 
+        }
+        $PSO = [PSCustomObject]@{
+            IP       = $Ip
+            FQDN     = $FQDN
+            Domen    = $Domen
+            Host     = $HostName
+            LastSeen = $LastSeen
+        }
+        $Res      += $PSO
+        $FQDN      = ""
+        $HostName  = ""
+        $Domen     = ""
+    }
+    Return $Res
+}
+
+Export-ModuleMember -Function Get-NewAESKey, Import-SettingsFromFile, Get-VarFromAESFile, Set-VarToAESFile, Disconnect-VPN, Connect-VPN, Add-ToLog, Restart-Switches, Restart-SwitchInInterval, Get-EventList, Send-Email, Start-PSScript, Restart-LocalHostInInterval, Show-Notification, Get-Logger, Restart-ServiceInInterval, Set-TelegramMessage, Initialize-Logging, Get-VarsFromFile, Get-HTMLTable, Get-HTMLCol, Get-ContentFromHTMLTemplate, Get-ErrorReporting, Get-CopyByBITS, Show-OpenDialog, Import-ModuleRemotely, Invoke-PSScriptBlock, Get-ACLArray, Set-PSModuleManifest, Get-VarToString, Get-UniqueArrayMembers, Resolve-IPtoFQDNinArray
