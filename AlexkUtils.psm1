@@ -1485,34 +1485,37 @@ function Import-ModuleRemotely {
     .DESCRIPTION
      Import powershell module to the remote session.
     .EXAMPLE
-    Import-ModuleRemotely -Type "file"
+    Import-ModuleRemotely -ModuleName "Module" -Session $Session
 #>    
     [CmdletBinding()]   
     Param(
         [Parameter( Mandatory = $true, Position = 0, HelpMessage = "Local powershell module name." )]
         [ValidateNotNullOrEmpty()]
-        [string] $moduleName,
+        [string] $ModuleName,
         [Parameter( Mandatory = $true, Position = 1, HelpMessage = "Powershell session." )]
         [ValidateNotNullOrEmpty()]
-        [System.Management.Automation.Runspaces.PSSession] $session
+        [System.Management.Automation.RunSpaces.PSSession] $Session
     )
 
-    Import-Module $moduleName
-
-    $Script = {`
-    if (get-module $moduleName)
-    {
-        remove-module $moduleName;
+    $Module = Import-Module $ModuleName -PassThru
+    if (!$Module)
+    { 
+        write-warning "Local module does not exist $ModuleName"; 
+        return; 
+    }  
+    
+    $ScriptBlock = {`
+        $ScriptBlock = {`
+        if (get-module $using:ModuleName)
+        {
+            remove-module $using:ModuleName;
+        }
+            New-Module -name $using:ModuleName -scriptblock { $($using:Module.Definition) } | import-module
+        }
+        . ([ScriptBlock]::Create($ScriptBlock))
     }
 
-    New-Module -Name $moduleName { $($(Get-Module $moduleName).Definition) } | Import-Module
-}
-
-    Invoke-Command -Session $Session -ScriptBlock {
-        Param($Script)
-        . ([ScriptBlock]::Create($Script))
-        Get-Module 
-    } -ArgumentList $Script
+    invoke-command -session $Session -scriptblock $ScriptBlock;      
 }
 function Invoke-PSScriptBlock {
     <#
@@ -1537,18 +1540,38 @@ function Invoke-PSScriptBlock {
         [Parameter( Mandatory = $False, Position = 1, ParameterSetName = "Remote", HelpMessage = "Remote computer name." )]   
         [string] $Computer,
         [Parameter( Mandatory = $False, Position = 2, ParameterSetName = "Remote", HelpMessage = "Remote credentials." )]
-        [System.Management.Automation.PSCredential]  $Credentials = $null   
+        [System.Management.Automation.PSCredential]  $Credentials, 
+        [Parameter( Mandatory = $False, Position = 3, ParameterSetName = "Remote", HelpMessage = "Remote credentials." )]
+        [string]  $ImportLocalModule,  
+        [Parameter( Mandatory = $False, Position = 4, ParameterSetName = "Remote", HelpMessage = "Test-connection before session." )]
+        [Switch]  $TestComputer  
     )
     
     $Res = $null
 
     try {
-        if ($Computer -ne "") {
-            if ($null -ne $Credentials) {            
-                $Session = New-PSSession -ComputerName $Computer -Credential  $Credentials
+        if ($Computer) {            
+            if ($TestComputer) {
+                $Connection = Test-Connection -ComputerName $Computer -count 2 -Delay 1 -Quiet
+                if (!$Connection){
+                    Write-host  "Unable to connect $Computer!" -ForegroundColor red
+                }
             }
             Else {
-                $Session = New-PSSession -ComputerName $Computer
+                $Connection = $true
+            }
+            if ($Credentials) {            
+                if($Connection) {
+                    $Session = New-PSSession -ComputerName $Computer -Credential  $Credentials
+                }
+            }
+            Else {
+                if($Connection) {
+                    $Session = New-PSSession -ComputerName $Computer
+                }
+            }
+            if ($ImportLocalModule){
+                Import-ModuleRemotely -ModuleName $ImportLocalModule -Session $Session
             }
         }
         Else {
@@ -1556,6 +1579,9 @@ function Invoke-PSScriptBlock {
         }
     }
     Catch {
+        if ($session){
+            Remove-PSSession $Session
+        }
         Get-ErrorReporting $_
         # Write-Host "Invoke-PSScriptBlock: Unable to establish remote session to $Computer" -ForegroundColor Red
         # Write-Host "$_" -ForegroundColor Red
@@ -1563,11 +1589,11 @@ function Invoke-PSScriptBlock {
         exit
     }
 
-    if ($null -ne $Session) {
+    if ($Session) {
         $Res = Invoke-Command -Session $Session -ScriptBlock $ScriptBlock
     }
     Else {
-        $LocalScriptBlock = [scriptblock]::Create($ScriptBlock.tostring().Replace("Using:", ""))        
+        $LocalScriptBlock = [scriptblock]::Create($ScriptBlock.ToString().Replace("Using:", ""))        
         $Res = Invoke-Command -ScriptBlock $LocalScriptBlock
     }
 
@@ -1765,5 +1791,45 @@ function Resolve-IPtoFQDNinArray {
     }
     Return $Res
 }
+Function Get-HelpersData {
+    <#
+    .SYNOPSIS 
+        .AUTHOR Alex
+        .DATE   11.04.2020
+        .VER    1
+    .DESCRIPTION
+        Function return row in array from helpers CSV
+    .EXAMPLE
+        To run in PSSession and filter:
+         Get-HelpersData -CSVFilePath "c:\helpers\helper.csv" -Column "RID" -Value "DOMAIN_ALIAS_RID_REMOTE_DESKTOP_USERS"
+    #>
+    [CmdletBinding()]    
+    Param (
+        [Parameter( Mandatory = $true, Position = 0, HelpMessage = "Full path to CSV helper file." )]
+        [ValidateNotNullOrEmpty()]
+        [string] $CSVFilePath,
+        [Parameter( Mandatory = $true, Position = 1, HelpMessage = "Column name." )]
+        [ValidateNotNullOrEmpty()]
+        [string] $Column,
+        [Parameter( Mandatory = $true, Position = 2, HelpMessage = "Column value." )]
+        [ValidateNotNullOrEmpty()]
+        [string] $Value
+    )
 
-Export-ModuleMember -Function Get-NewAESKey, Import-SettingsFromFile, Get-VarFromAESFile, Set-VarToAESFile, Disconnect-VPN, Connect-VPN, Add-ToLog, Restart-Switches, Restart-SwitchInInterval, Get-EventList, Send-Email, Start-PSScript, Restart-LocalHostInInterval, Show-Notification, Get-Logger, Restart-ServiceInInterval, Set-TelegramMessage, Initialize-Logging, Get-VarsFromFile, Get-HTMLTable, Get-HTMLCol, Get-ContentFromHTMLTemplate, Get-ErrorReporting, Get-CopyByBITS, Show-OpenDialog, Import-ModuleRemotely, Invoke-PSScriptBlock, Get-ACLArray, Set-PSModuleManifest, Get-VarToString, Get-UniqueArrayMembers, Resolve-IPtoFQDNinArray
+    $Res = $Null
+    if (Test-Path $CSVFilePath){
+        $CSVFile = Import-Csv -path $CSVFilePath -Encoding utf8
+        $Res = $null 
+        foreach ($item in $CSVFile) {
+            if ($item.$Column -eq $Value) {
+                Return $item
+            }
+        }
+    }
+    Else {
+        Write-host "File path [$CSVFilePath] does not exist!"
+    }
+    Return $Res
+}
+
+Export-ModuleMember -Function Get-NewAESKey, Import-SettingsFromFile, Get-VarFromAESFile, Set-VarToAESFile, Disconnect-VPN, Connect-VPN, Add-ToLog, Restart-Switches, Restart-SwitchInInterval, Get-EventList, Send-Email, Start-PSScript, Restart-LocalHostInInterval, Show-Notification, Get-Logger, Restart-ServiceInInterval, Set-TelegramMessage, Initialize-Logging, Get-VarsFromFile, Get-HTMLTable, Get-HTMLCol, Get-ContentFromHTMLTemplate, Get-ErrorReporting, Get-CopyByBITS, Show-OpenDialog, Import-ModuleRemotely, Invoke-PSScriptBlock, Get-ACLArray, Set-PSModuleManifest, Get-VarToString, Get-UniqueArrayMembers, Resolve-IPtoFQDNinArray, Get-HelpersData
