@@ -236,7 +236,7 @@ function Disconnect-VPN {
     )    
     
     Add-ToLog "Try to disconnect VPN - $VPNConnectionName" $logFilePath
-    $Res = & rasdial $VPNConnectionName /disconnect
+    $Res = (& rasdial $VPNConnectionName /disconnect)  -join " "
     if ($Res -like "*success*") {
         Add-ToLog ($Res -like "*success*") $logFilePath
         return $true
@@ -274,7 +274,7 @@ Function Connect-VPN {
         [securestring] $Password
     )   
     Add-ToLog "Try to connect VPN - $VPNConnectionName under $Login" $logFilePath
-    $Res = & rasdial $VPNConnectionName  $Login ( Get-VarToString $Password)
+    $Res = (& rasdial $VPNConnectionName  $Login ( Get-VarToString $Password)) -join " "
     if (($Res -like "*success*") -or ($Res -like "*успешно*")) {
         Add-ToLog $Res $logFilePath
         return $true         
