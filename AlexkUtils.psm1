@@ -1600,10 +1600,12 @@ function Invoke-PSScriptBlock {
 
     if ($Session) {
         $Res = Invoke-Command -Session $Session -ScriptBlock $ScriptBlock
+        Remove-PSSession $Session
     }
     Else {
         $LocalScriptBlock = [scriptblock]::Create($ScriptBlock.ToString().Replace("Using:", ""))        
         $Res = Invoke-Command -ScriptBlock $LocalScriptBlock
+        Remove-PSSession $Session
     }
 
     return $Res
@@ -1840,5 +1842,87 @@ Function Get-HelpersData {
     }
     Return $Res
 }
+Function Get-DifferenceBetweenArrays {
+    <#
+    .SYNOPSIS 
+        .AUTHOR Alexk
+        .DATE 14.04.2020
+        .VER 1   
+    .DESCRIPTION
+     First and second arrays should be the same structure.
+     Return array with objects absent in first array.
+    .EXAMPLE
+    Get-DifferenceBetweenArrays -FirstArray $Array1 -SecondArray $Array2
+    #>    
+    [CmdletBinding()]   
+    Param(
+        [Parameter( Mandatory = $true, Position = 0, HelpMessage = "First array." )]
+        [ValidateNotNullOrEmpty()]
+        [Array] $FirstArray,
+        [Parameter( Mandatory = $true, Position = 0, HelpMessage = "Second array." )]
+        [ValidateNotNullOrEmpty()]
+        [Array] $SecondArray
+    )  
+    [Array] $Res = @()
+    [Array] $Columns = $FirstArray | Get-Member -MemberType NoteProperty | Select-Object -ExpandProperty Name
+    [Array] $NoteProperties1 = $FirstArray | Get-Member -MemberType NoteProperty | Select-Object -ExpandProperty Name
+    [Array] $NoteProperties2 = $SecondArray | Get-Member -MemberType NoteProperty | Select-Object -ExpandProperty Name
+    [Array] $NoteProperties1WithType = @()
+    [Array] $NoteProperties2WithType = @()
+    [string] $NoteProperties2WithTypeText = ""
+    [string] $NoteProperties1WithTypeText = ""
+    [int]   $FirstArrayCount = $FirstArray.Count
+    [int]   $SecondArrayCount = $SecondArray.Count
+    if ($FirstArrayCount) {
+        foreach ($note in $NoteProperties1) {
+            $PSO = [PSCustomObject]@{
+                Name = $note
+                Type = $FirstArray[0].$note.GetType()
+            }
+            $NoteProperties1WithType += $PSO
+            $NoteProperties1WithTypeText += "$note($($PSO.type)),"
+        }
+    }
+    if ($SecondArrayCount) {
+        foreach ($note in $NoteProperties2) {
+            $PSO = [PSCustomObject]@{
+                Name = $note
+                Type = $SecondArray[0].$note.GetType()
+            }
+            $NoteProperties2WithType += $PSO
+            $NoteProperties2WithTypeText += "$note($($PSO.type)),"
+        }
+    }
 
-Export-ModuleMember -Function Get-NewAESKey, Import-SettingsFromFile, Get-VarFromAESFile, Set-VarToAESFile, Disconnect-VPN, Connect-VPN, Add-ToLog, Restart-Switches, Restart-SwitchInInterval, Get-EventList, Send-Email, Start-PSScript, Restart-LocalHostInInterval, Show-Notification, Get-Logger, Restart-ServiceInInterval, Set-TelegramMessage, Initialize-Logging, Get-VarsFromFile, Get-HTMLTable, Get-HTMLCol, Get-ContentFromHTMLTemplate, Get-ErrorReporting, Get-CopyByBITS, Show-OpenDialog, Import-ModuleRemotely, Invoke-PSScriptBlock, Get-ACLArray, Set-PSModuleManifest, Get-VarToString, Get-UniqueArrayMembers, Resolve-IPtoFQDNinArray, Get-HelpersData
+    $NoteProperties1WithTypeText = $NoteProperties1WithTypeText.Remove($NoteProperties1WithTypeText.ToCharArray().count - 1)
+    $NoteProperties2WithTypeText = $NoteProperties2WithTypeText.Remove($NoteProperties2WithTypeText.ToCharArray().count - 1)
+
+    if ($NoteProperties1WithTypeText -eq $NoteProperties2WithTypeText) {
+        foreach ($Item in $SecondArray ) {
+            $NotExist = $True
+            foreach ($Item1 in $FirstArray) {                
+                $ColumnEqual = $True
+                foreach ($Column in  $Columns) {                    
+                    if ($Item.$Column -ne $item1.$Column) {
+                        $ColumnEqual = $False                 
+                    } 
+                } 
+                if ($ColumnEqual) {
+                    $NotExist = $False    
+                    break 
+                }              
+            } 
+            If ($NotExist) {
+                $Res += $item
+            }   
+        }
+        Return $res
+    }   
+    Else {
+        Write-Host "Arrays does not have equal structure! [$NoteProperties1WithTypeText] != [$NoteProperties2WithTypeText]" -ForegroundColor red
+        Return $res
+    }
+    
+}
+
+Export-ModuleMember -Function Get-NewAESKey, Import-SettingsFromFile, Get-VarFromAESFile, Set-VarToAESFile, Disconnect-VPN, Connect-VPN, Add-ToLog, Restart-Switches, Restart-SwitchInInterval, Get-EventList, Send-Email, Start-PSScript, Restart-LocalHostInInterval, Show-Notification, Get-Logger, Restart-ServiceInInterval, Set-TelegramMessage, Initialize-Logging, Get-VarsFromFile, Get-HTMLTable, Get-HTMLCol, Get-ContentFromHTMLTemplate, Get-ErrorReporting, Get-CopyByBITS, Show-OpenDialog, Import-ModuleRemotely, Invoke-PSScriptBlock, Get-ACLArray, Set-PSModuleManifest, Get-VarToString, Get-UniqueArrayMembers, Resolve-IPtoFQDNinArray, Get-HelpersData, Get-DifferenceBetweenArrays
