@@ -1132,7 +1132,8 @@ function Get-ErrorReporting {
         [ValidateNotNullOrEmpty()]
         $Trap
     )
-
+    [string]$PreviousCommand   = (Get-History -count 1).CommandLine 
+    [string]$CommandArgs       = [System.Management.Automation.PsParser]::Tokenize($PreviousCommand, [ref] [System.Management.Automation.PSParseError[]] @()) | Where-Object { $_.type -eq "CommandArgument" } | Select-Object -last 1 -expand content 
     [string]$Trap1             = $Trap
     [string]$Trap1             = ($Trap1.replace("[","")).replace("]","")
     [string]$line              = $Trap.InvocationInfo.ScriptLineNumber
@@ -1154,15 +1155,20 @@ function Get-ErrorReporting {
         [string]$Module = (($Trap.ScriptStackTrace).split(",")[1]).split("`n")[0].replace(" line ", "").Trim()
         [string]$Function    = (($Trap.ScriptStackTrace).split(",")[0]).replace("at ","")
         [string]$ToScreen    = "$Trap `n    Script:   `"$($Script):$($line)`"`n    Module:   `"$Module`"`n    Function: `"$Function`""
-        if ("$($Script):$($line)" -ne $Module) {   
-            [string]$Message     = "$Trap1 [script] $Trace1" 
+        if ($CommandArgs) {   
+            [string]$Message     = "$Trap1 [script] $Trace1 [args] $CommandArgs"
         }
         Else {
             [string]$Message     = "$Trap1 [script] $Trace1" 
         }
     }
     else { 
-        [string]$Message = "$Trap1 [script] $Trace1" 
+        if ($CommandArgs){
+            [string]$Message = "$Trap1 [script] $Trace1 [args] $CommandArgs"
+        }
+        Else {
+            [string]$Message = "$Trap1 [script] $Trace1"
+        } 
         $ToScreen = "$Trap `n   $($Script):$($line)"
     }
  
@@ -1175,6 +1181,9 @@ function Get-ErrorReporting {
     Write-Host $ToScreen -ForegroundColor Blue
     Write-Host "Stack trace:" -ForegroundColor green     
     Write-Host "    $Trace" -ForegroundColor green
+    Write-Host "Previous command:" -ForegroundColor Yellow
+    Write-Host "    $PreviousCommand" -ForegroundColor Yellow
+    Write-Host "    $CommandArgs" -ForegroundColor Yellow
     Write-Host "====================================================================================================================================================" -ForegroundColor Red
 }
 function  Get-HTMLRowFullness {
