@@ -176,7 +176,9 @@ Function Get-VarToString {
     
     $Var = [System.Runtime.InteropServices.Marshal]::SecureStringToBSTR($Var)
     $Res = [System.Runtime.InteropServices.Marshal]::PtrToStringAuto($Var)
-
+    if(!$res){
+        Write-Host "Get-VarToString return $Null! Var type is $($Var.gettype())." -ForegroundColor red
+    }
     return $Res
 }
 Function Add-ToLog {
@@ -268,13 +270,15 @@ Function Connect-VPN {
         [string] $logFilePath,
         [Parameter(Mandatory = $true, Position = 2, HelpMessage = "VPN Login." )]
         [ValidateNotNullOrEmpty()]
-        [string] $Login,
+        [securestring] $Login,
         [Parameter(Mandatory = $true, Position = 3, HelpMessage = "VPN Password." )]
         [ValidateNotNullOrEmpty()]
         [securestring] $Password
-    )   
-    Add-ToLog "Try to connect VPN - $VPNConnectionName under $Login" $logFilePath
-    $Res = (& rasdial $VPNConnectionName  $Login ( Get-VarToString $Password)) -join " "
+    )
+
+    [string] $LoginText = Get-VarToString $Login
+    Add-ToLog "Try to connect VPN - $VPNConnectionName under $LoginText" $logFilePath
+    $Res = (& rasdial $VPNConnectionName  $LoginText ( Get-VarToString $Password)) -join " "
     if (($Res -like "*success*") -or ($Res -like "*успешно*")) {
         Add-ToLog $Res $logFilePath
         return $true         
@@ -1088,7 +1092,7 @@ Function Get-ContentFromHTMLTemplate {
         [Parameter( Mandatory = $true, Position = 2, HelpMessage = "Path to HTML template file." )]
         [string]$HTMLTemplateFile,
         [Parameter( Mandatory = $false, Position = 3, HelpMessage = "Path to new HTML file." )]
-        [string]$HTMLFile = $null
+        [string]$HTMLFile
     )
     $cd = "<col id=`"col%num%`" />"
     $th = @"
@@ -1110,7 +1114,7 @@ Function Get-ContentFromHTMLTemplate {
     $HTMLTemplate = $HTMLTemplate.Replace( "%data%", $HTMLData)
     $HTMLTemplate = $HTMLTemplate.Replace( "%colnames%", $Header)
     $HTMLTemplate = $HTMLTemplate.Replace( "%colid%", $ColId)
-    if ($null -ne $HTMLFile) { 
+    if ($HTMLFile) { 
         $HTMLTemplate | Out-File $HTMLFile -Encoding utf8 -Force
     }
     return $HTMLTemplate
@@ -1132,43 +1136,32 @@ function Get-ErrorReporting {
         [ValidateNotNullOrEmpty()]
         $Trap
     )
-    [string]$PreviousCommand   = (Get-History -count 1).CommandLine 
-    [string]$CommandArgs       = [System.Management.Automation.PsParser]::Tokenize($PreviousCommand, [ref] [System.Management.Automation.PSParseError[]] @()) | Where-Object { $_.type -eq "CommandArgument" } | Select-Object -last 1 -expand content 
-    [string]$Trap1             = $Trap
-    [string]$Trap1             = ($Trap1.replace("[","")).replace("]","")
-    [string]$line              = $Trap.InvocationInfo.ScriptLineNumber
-    [string]$Script            = $Trap.InvocationInfo.ScriptName
-    [string]$StackTrace        = $Trap.ScriptStackTrace
-    [array] $UpDownStackTrace  = @($StackTrace.Split("`n"))
-    [int16] $ItemCount         = $UpDownStackTrace.Count
-    [array] $TempStackTrace    = @(1..$ItemCount )
+    [string]$PreviousCommand = $Trap.InvocationInfo.line
+    [string]$Trap1 = $Trap
+    [string]$Trap1 = ($Trap1.replace("[", "")).replace("]", "")
+    [string]$line = $Trap.InvocationInfo.ScriptLineNumber
+    [string]$Script = $Trap.InvocationInfo.ScriptName
+    [string]$StackTrace = $Trap.ScriptStackTrace
+    [array] $UpDownStackTrace = @($StackTrace.Split("`n"))
+    [int16] $ItemCount = $UpDownStackTrace.Count
+    [array] $TempStackTrace = @(1..$ItemCount )
     
-    foreach ($item in $UpDownStackTrace){
+    foreach ($item in $UpDownStackTrace) {
         $TempStackTrace[$ItemCount - 1] = $item
         $ItemCount -= 1
     }
     $UpDownStackTrace = $TempStackTrace -join "`n"
 
-    [string]$Trace      = $UpDownStackTrace | ForEach-Object { ((($_ -replace "`n", "`n    ") -replace " line ", "") -replace "at ", "") -replace "<ScriptBlock>", "ScriptBlock"  }
-    [string]$Trace1     = $UpDownStackTrace | ForEach-Object { ((($_ -replace "`n", "`n ") -replace " line ", "") -replace "at ", "") -replace "<ScriptBlock>", "ScriptBlock" }
+    [string]$Trace = $UpDownStackTrace | ForEach-Object { ((($_ -replace "`n", "`n    ") -replace " line ", "") -replace "at ", "") -replace "<ScriptBlock>", "ScriptBlock" }
+    [string]$Trace1 = $UpDownStackTrace | ForEach-Object { ((($_ -replace "`n", "`n ") -replace " line ", "") -replace "at ", "") -replace "<ScriptBlock>", "ScriptBlock" }
     if ($Script -ne $Trap.Exception.ErrorRecord.InvocationInfo.ScriptName) {
         [string]$Module = (($Trap.ScriptStackTrace).split(",")[1]).split("`n")[0].replace(" line ", "").Trim()
-        [string]$Function    = (($Trap.ScriptStackTrace).split(",")[0]).replace("at ","")
-        [string]$ToScreen    = "$Trap `n    Script:   `"$($Script):$($line)`"`n    Module:   `"$Module`"`n    Function: `"$Function`""
-        if ($CommandArgs) {   
-            [string]$Message     = "$Trap1 [script] $Trace1 [args] $CommandArgs"
-        }
-        Else {
-            [string]$Message     = "$Trap1 [script] $Trace1" 
-        }
+        [string]$Function = (($Trap.ScriptStackTrace).split(",")[0]).replace("at ", "")
+        [string]$ToScreen = "$Trap `n    Script:   `"$($Script):$($line)`"`n    Module:   `"$Module`"`n    Function: `"$Function`""
+        [string]$Message = "$Trap1 [script] $Trace1"         
     }
     else { 
-        if ($CommandArgs){
-            [string]$Message = "$Trap1 [script] $Trace1 [args] $CommandArgs"
-        }
-        Else {
-            [string]$Message = "$Trap1 [script] $Trace1"
-        } 
+        [string]$Message = "$Trap1 [script] $Trace1"        
         $ToScreen = "$Trap `n   $($Script):$($line)"
     }
  
@@ -1183,10 +1176,9 @@ function Get-ErrorReporting {
     Write-Host "    $Trace" -ForegroundColor green
     Write-Host "Previous command:" -ForegroundColor Yellow
     Write-Host "    $PreviousCommand" -ForegroundColor Yellow
-    Write-Host "    $CommandArgs" -ForegroundColor Yellow
     Write-Host "====================================================================================================================================================" -ForegroundColor Red
 }
-function  Get-HTMLRowFullness {
+function Get-HTMLRowFullness {
 # Get-RowFullness    
     <#
     .SYNOPSIS 
@@ -1204,6 +1196,7 @@ function  Get-HTMLRowFullness {
         [ValidateNotNullOrEmpty()]
         [array]$Line
     )  
+    
     $FillCounter = 0
     foreach ($col in ($Line[0].PSObject.Properties.Name )) {
         if ($Line.$col -ne "") {
