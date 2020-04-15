@@ -538,16 +538,18 @@ Function Start-PSScript {
         [Parameter(Mandatory = $true, Position = 0, HelpMessage = "Script path." )]
         [ValidateNotNullOrEmpty()]
         [string] $ScriptPath,
-        [Parameter(Mandatory = $false, Position = 1, HelpMessage = "Command to execute." )]
+        [Parameter(Mandatory = $false, Position = 1, HelpMessage = "Command to execute." , ParameterSetName = "Script" )]
         [string] $PSCommand,
-        [Parameter(Mandatory = $false, Position = 2, HelpMessage = "Credentials." )]
+        [Parameter(Mandatory = $false, Position = 2, HelpMessage = "Credentials." , ParameterSetName = "Command" )]
         [System.Management.Automation.PSCredential]  $Credentials, 
         [Parameter(Mandatory = $true, Position = 4, HelpMessage = "Log file path." )]
         [ValidateNotNullOrEmpty()] 
         [string] $logFilePath,
         [Parameter(Mandatory = $false, Position = 5, HelpMessage = "Output file path." )]
         [string] $OutputFilePath,
-        [Parameter(Mandatory = $false, Position = 5, HelpMessage = "Use elevated rights." )]
+        [Parameter(Mandatory = $false, Position = 6, HelpMessage = "Working directory." )]
+        [string] $WorkDir,
+        [Parameter(Mandatory = $false, Position = 7, HelpMessage = "Use elevated rights." )]
         [switch]   $Elevated        
     )
     $PowerShellPrgPath = "C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe"
@@ -559,7 +561,7 @@ Function Start-PSScript {
     }
      
     if ($Elevated) {
-        $Arguments += " -Verb runas" 
+        $Arguments += " -Verb RunAs" 
     }
    
     if ($OutputFilePath) {
@@ -575,21 +577,22 @@ Function Start-PSScript {
         if ($PossibleToStart) {
             Add-ToLog "Start script  $ScriptPath" $logFilePath 
             if ($Credentials) {
-                Start-Process $PowerShellPrgPath -ArgumentList $Arguments -Credential $Credential
+                $Res = Start-Process $PowerShellPrgPath -ArgumentList $Arguments -Credential $Credentials -PassThru -Wait
             }  
             Else {
-                Start-Process $PowerShellPrgPath -ArgumentList $Arguments
+                $Res = Start-Process $PowerShellPrgPath -ArgumentList $Arguments -PassThru -Wait
             }     
         }
     }
     else {
         if ($Credentials) {
-            Start-Process $PowerShellPrgPath -ArgumentList $Arguments -Credential $Credential
+            $Res = Start-Process $PowerShellPrgPath -ArgumentList $Arguments -Credential $Credentials -PassThru -Wait
         }  
         Else {
-            Start-Process $PowerShellPrgPath -ArgumentList $Arguments
+            $Res = Start-Process $PowerShellPrgPath -ArgumentList $Arguments -PassThru -Wait
         } 
     }
+    Return $Res
 }
 Function Restart-SwitchInInterval {
 #RebootSwitchesInInterval
@@ -655,6 +658,7 @@ Function Restart-SwitchInInterval {
             ShowNotification "RebootSwitchesInInterval" "Try to reboot switch $($Switch.SwitchIp)!" "Info" "C:\DATA\PROJECTS\ConnectVPN\VPN.log" 10
         } 
     }
+
 }
 Function Restart-LocalHostInInterval {
 #RestartLocalHostInInterval
