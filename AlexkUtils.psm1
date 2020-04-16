@@ -538,9 +538,9 @@ Function Start-PSScript {
         [Parameter(Mandatory = $true, Position = 0, HelpMessage = "Script path." )]
         [ValidateNotNullOrEmpty()]
         [string] $ScriptPath,
-        [Parameter(Mandatory = $false, Position = 1, HelpMessage = "Command to execute." , ParameterSetName = "Script" )]
+        [Parameter(Mandatory = $false, Position = 1, HelpMessage = "Command to execute." , ParameterSetName = "Command" )]
         [string] $PSCommand,
-        [Parameter(Mandatory = $false, Position = 2, HelpMessage = "Credentials." , ParameterSetName = "Command" )]
+        [Parameter(Mandatory = $false, Position = 2, HelpMessage = "Credentials." )]
         [System.Management.Automation.PSCredential]  $Credentials, 
         [Parameter(Mandatory = $true, Position = 4, HelpMessage = "Log file path." )]
         [ValidateNotNullOrEmpty()] 
@@ -550,14 +550,21 @@ Function Start-PSScript {
         [Parameter(Mandatory = $false, Position = 6, HelpMessage = "Working directory." )]
         [string] $WorkDir,
         [Parameter(Mandatory = $false, Position = 7, HelpMessage = "Use elevated rights." )]
-        [switch]   $Elevated        
-    )
-    $PowerShellPrgPath = "C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe"
+        [switch]   $Evaluate        
+    )    
+    
+    [string] $PowerShellPrgPath = "C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe"
+    if($Credentials){
+        if(!(Test-Credentials $Credentials)){
+            Write-Host "Supplied credentials [$($credentials.username)] error!" -ForegroundColor red            
+        }
+    }
+
     if (!$PSCommand) {
-        $Arguments = "-WindowStyle Hidden -NonInteractive -Executionpolicy unrestricted  -file ""$ScriptPath""" 
+        $Arguments = "-WindowStyle Hidden -NonInteractive -file ""$ScriptPath""" # -Executionpolicy unrestricted
     }
     else {
-        $Arguments = "-NoNewWindow -WindowStyle Hidden -NonInteractive -Executionpolicy unrestricted -Command  ""& {$PSCommand}"""
+        $Arguments = "-NoNewWindow -WindowStyle Hidden -NonInteractive -Command  ""& {$PSCommand}""" # -Executionpolicy unrestricted
     }
      
     if ($Elevated) {
@@ -576,20 +583,21 @@ Function Start-PSScript {
 
         if ($PossibleToStart) {
             Add-ToLog "Start script  $ScriptPath" $logFilePath 
+            
             if ($Credentials) {
-                $Res = Start-Process $PowerShellPrgPath -ArgumentList $Arguments -Credential $Credentials -PassThru -Wait
+                $Res = Start-Process -FilePath "$PowerShellPrgPath" -ArgumentList $Arguments -Credential $Credentials -PassThru -Wait
             }  
             Else {
-                $Res = Start-Process $PowerShellPrgPath -ArgumentList $Arguments -PassThru -Wait
-            }     
+                $Res = Start-Process -FilePath "$PowerShellPrgPath" -ArgumentList $Arguments -PassThru -Wait
+            }                
         }
     }
     else {
         if ($Credentials) {
-            $Res = Start-Process $PowerShellPrgPath -ArgumentList $Arguments -Credential $Credentials -PassThru -Wait
+            $Res = Start-Process -FilePath "$PowerShellPrgPath" -ArgumentList $Arguments -Credential $Credentials -PassThru -Wait
         }  
         Else {
-            $Res = Start-Process $PowerShellPrgPath -ArgumentList $Arguments -PassThru -Wait
+            $Res = Start-Process -FilePath "$PowerShellPrgPath" -ArgumentList $Arguments -PassThru -Wait
         } 
     }
     Return $Res
@@ -1922,4 +1930,60 @@ Function Get-DifferenceBetweenArrays {
     
 }
 
-Export-ModuleMember -Function Get-NewAESKey, Import-SettingsFromFile, Get-VarFromAESFile, Set-VarToAESFile, Disconnect-VPN, Connect-VPN, Add-ToLog, Restart-Switches, Restart-SwitchInInterval, Get-EventList, Send-Email, Start-PSScript, Restart-LocalHostInInterval, Show-Notification, Get-Logger, Restart-ServiceInInterval, Set-TelegramMessage, Initialize-Logging, Get-VarsFromFile, Get-HTMLTable, Get-HTMLCol, Get-ContentFromHTMLTemplate, Get-ErrorReporting, Get-CopyByBITS, Show-OpenDialog, Import-ModuleRemotely, Invoke-PSScriptBlock, Get-ACLArray, Set-PSModuleManifest, Get-VarToString, Get-UniqueArrayMembers, Resolve-IPtoFQDNinArray, Get-HelpersData, Get-DifferenceBetweenArrays
+function Test-Credentials {
+     <#
+    .SYNOPSIS 
+        .AUTHOR Open source
+        .DATE 16.04.2020
+        .VER 1   
+    .DESCRIPTION
+     Test user credentials.
+    .EXAMPLE
+    Get-DifferenceBetweenArrays -FirstArray $Array1 -SecondArray $Array2
+    #>       
+    
+    [CmdletBinding()]
+    [OutputType([Bool])] 
+       
+    Param ( 
+        [Parameter( Mandatory = $false,  ValueFromPipeLine = $true,  ValueFromPipelineByPropertyName = $true )] 
+        [ValidateNotNull()] 
+        [System.Management.Automation.PSCredential]
+        [System.Management.Automation.Credential()] 
+        $Credentials
+    )
+    $Domain   = $null
+    $Root     = $null
+    $Username = $null
+    $Password = $null
+      
+    
+    # Checking module
+    Try {
+        # Split username and password
+        $Username = $credentials.username
+        $Password = $credentials.GetNetworkCredential().password
+  
+        # Get Domain
+        $Root = "LDAP://" + ([ADSI]'').distinguishedName
+        $Domain = New-Object System.DirectoryServices.DirectoryEntry($Root, $UserName, $Password)
+    }
+    Catch {
+        $_.Exception.Message
+        Continue
+    }
+  
+    If (!$domain) {
+        Write-Warning "Domain not found."
+    }
+    Else {
+        If ($null -ne $domain.name) {
+            return $True
+        }
+        Else {
+            return $false
+        }
+    }
+}
+
+Export-ModuleMember -Function Get-NewAESKey, Import-SettingsFromFile, Get-VarFromAESFile, Set-VarToAESFile, Disconnect-VPN, Connect-VPN, Add-ToLog, Restart-Switches, Restart-SwitchInInterval, Get-EventList, Send-Email, Start-PSScript, Restart-LocalHostInInterval, Show-Notification, Get-Logger, Restart-ServiceInInterval, Set-TelegramMessage, Initialize-Logging, Get-VarsFromFile, Get-HTMLTable, Get-HTMLCol, Get-ContentFromHTMLTemplate, Get-ErrorReporting, Get-CopyByBITS, Show-OpenDialog, Import-ModuleRemotely, Invoke-PSScriptBlock, Get-ACLArray, Set-PSModuleManifest, Get-VarToString, Get-UniqueArrayMembers, Resolve-IPtoFQDNinArray, Get-HelpersData, Get-DifferenceBetweenArrays, Test-Credentials
