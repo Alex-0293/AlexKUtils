@@ -203,7 +203,12 @@ Function Add-ToLog {
         [string] $logFilePath,
         [Parameter(Mandatory = $false, Position = 2, HelpMessage = "Saving to file mode." )]
         [ValidateSet("append", "replace")]
-        [string] $Mode = "append"
+        [string] $Mode = "append",
+        [Parameter(Mandatory = $false, Position = 3, HelpMessage = "Display on the screen." )]
+        [switch] $Display,
+        [Parameter(Mandatory = $false, Position = 4, HelpMessage = "Message status." )]
+        [ValidateSet("Info", "Warning", "Error")]
+        [string] $Status
     )
 
     $Date = Get-Date
@@ -212,6 +217,26 @@ Function Add-ToLog {
         "append" { Out-File -FilePath $logFilePath -Encoding utf8 -Append -Force -InputObject $Text }
         "replace" { Out-File -FilePath $logFilePath -Encoding utf8 -Force -InputObject $Text }
         Default { }    
+    }
+    If ($Display){
+       if($status){ 
+            switch ($Status) {
+                "Info" { 
+                    Write-Host $Message -ForegroundColor Green
+                 }
+                 "Warning" { 
+                    Write-Host $Message -ForegroundColor Yellow
+                 }
+                 "Error" { 
+                    Write-Host $Message -ForegroundColor Red
+                 }
+                Default {}
+            }
+       }
+       Else{
+            Write-Host $Message 
+       }
+
     }
 }
 function Disconnect-VPN {
