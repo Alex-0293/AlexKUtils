@@ -33,7 +33,7 @@ Copyright = '(c) AlexK (1928311@tuta.io). All rights reserved.'
 # Description = ''
 
 # Minimum version of the PowerShell engine required by this module
-PowerShellVersion = '4.0.0'
+PowerShellVersion = '4.0'
 
 # Name of the PowerShell host required by this module
 # PowerShellHostName = ''
