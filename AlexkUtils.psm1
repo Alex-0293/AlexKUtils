@@ -933,8 +933,12 @@ function Initialize-Logging {
     )
     Set-StrictMode -Version $StrictVer
     
+    If(!(Test-path "$MyScriptRoot\LOGS")){
+        New-Item -path "$MyScriptRoot\LOGS" -ItemType Directory
+    }
+    
     $ErrorFileName = "Errors.log"
-    $Global:Logger = Get-Logger "$MyScriptRoot\$ErrorFileName"
+    $Global:Logger = Get-Logger "$MyScriptRoot\LOGS\$ErrorFileName"
     Write-Debug $Global:Logger
     if (Test-Path "$MyScriptRoot\debug.txt") {
         $TranscriptPath = "$MyScriptRoot\Transcript.log"
