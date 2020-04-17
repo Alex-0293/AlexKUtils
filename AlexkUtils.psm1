@@ -966,7 +966,7 @@ function Initialize-Logging {
     $Global:Logger = Get-Logger "$MyScriptRoot\LOGS\$ErrorFileName"
     Write-Debug $Global:Logger
     if (Test-Path "$MyScriptRoot\debug.txt") {
-        $TranscriptPath = "$MyScriptRoot\Transcript.log"
+        $TranscriptPath = "$MyScriptRoot\LOGS\Transcript.log"
         Start-Transcript -Path $TranscriptPath -Append -Force
     }
     else {
@@ -992,14 +992,19 @@ function Get-VarsFromFile {
         [ValidateNotNullOrEmpty()] 
         [string]$VarFile
     )
-    try {
-        . ("$VarFile")
+    if(Test-path $VarFile){
+        try {
+            . ("$VarFile")
+        }
+        catch {
+            
+            Get-ErrorReporting $_
+            #Write-Host "Error while loading variables from file $VarFile" 
+        }
     }
-    catch {
-        Get-ErrorReporting $_
-        #Write-Host "Error while loading variables from file $VarFile" 
+    Else {
+        Write-Host "File [$VarFile] not found!" -ForegroundColor Red
     }
-
 }
 Function Get-HTMLTable {
     <#
