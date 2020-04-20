@@ -21,6 +21,13 @@ Get-ContentFromHTMLTemlate          Get-ContentFromHTMLTemplate
 (removed functions)
 IsHardwareRebooting
 
+20.04.20202
+
+Get-VarsFromFile      Get-SettingsFromFile
+GlobalVars            GlobalSettings
+"$ProjectRoot\VARS\Vars.ps1"    ""
+
+
 
 (Data types)
 [switch]

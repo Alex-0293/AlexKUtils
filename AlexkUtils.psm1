@@ -950,31 +950,32 @@ function Initialize-Logging {
 #>    
     [CmdletBinding()]   
     Param(
-        [Parameter( Mandatory = $true, Position = 0, HelpMessage = "Script root path." )]
-        [ValidateNotNullOrEmpty()] 
-        [string]$MyScriptRoot,
+        [Parameter( Mandatory = $true, Position = 0, HelpMessage = "Error log file path." )]
+        [ValidateNotNullOrEmpty()]
+        [string]$ErrorLogFilePath,
         [Parameter( Mandatory = $false, Position = 1, HelpMessage = "Powershell strict version." )]
         [string]$StrictVer = "Latest"
     )
     Set-StrictMode -Version $StrictVer
     
-    If(!(Test-path "$MyScriptRoot\LOGS")){
-        New-Item -path "$MyScriptRoot\LOGS" -ItemType Directory
+    $LogFolder = split-path $ErrorLogFilePath
+    If(!(Test-path $LogFolder)){
+        New-Item -path $LogFolder -ItemType Directory
     }
     
-    $ErrorFileName = "Errors.log"
-    $Global:Logger = Get-Logger "$MyScriptRoot\LOGS\$ErrorFileName"
+    $Global:Logger = Get-Logger $ErrorLogFilePath
     Write-Debug $Global:Logger
-    if (Test-Path "$MyScriptRoot\debug.txt") {
-        $TranscriptPath = "$MyScriptRoot\LOGS\Transcript.log"
+    
+    $ScriptFolder = Split-Path $LogFolder -parent
+    if (Test-Path "$ScriptFolder\debug.txt") {
+        $TranscriptPath = "$LogFolder\Transcript.log"
         Start-Transcript -Path $TranscriptPath -Append -Force
     }
     else {
             $Global:ErrorActionPreference = 'Stop'
-    }
-    
+    }    
 }
-function Get-VarsFromFile {
+function Get-SettingsFromFile {
 #Get-Vars
     <#
     .SYNOPSIS 
@@ -984,26 +985,20 @@ function Get-VarsFromFile {
     .DESCRIPTION
      Load variables from external file.
     .EXAMPLE
-    Get-VarsFromFile -MyScriptRoot "c:\script\var.ps1"
+    Get-SettingsFromFile -MyScriptRoot "c:\script\var.ps1"
 #>    
     [CmdletBinding()]   
     Param(
-        [Parameter( Mandatory = $true, Position = 0, HelpMessage = "Variables file path." )]
+        [Parameter( Mandatory = $true, Position = 0, HelpMessage = "Settings file path." )]
         [ValidateNotNullOrEmpty()] 
-        [string]$VarFile
-    )
-    if(Test-path $VarFile){
-        try {
-            . ("$VarFile")
-        }
-        catch {
-            
-            Get-ErrorReporting $_
-            #Write-Host "Error while loading variables from file $VarFile" 
-        }
+        [string]$SettingsFile
+    )    
+    
+    if(Test-path $SettingsFile){
+        . ("$SettingsFile")
     }
     Else {
-        Write-Host "File [$VarFile] not found!" -ForegroundColor Red
+        Write-Host "Setting file [$SettingsFile] not found!" -ForegroundColor Red
     }
 }
 Function Get-HTMLTable {
@@ -2020,4 +2015,4 @@ function Test-Credentials {
     }
 }
 
-Export-ModuleMember -Function Get-NewAESKey, Import-SettingsFromFile, Get-VarFromAESFile, Set-VarToAESFile, Disconnect-VPN, Connect-VPN, Add-ToLog, Restart-Switches, Restart-SwitchInInterval, Get-EventList, Send-Email, Start-PSScript, Restart-LocalHostInInterval, Show-Notification, Get-Logger, Restart-ServiceInInterval, Set-TelegramMessage, Initialize-Logging, Get-VarsFromFile, Get-HTMLTable, Get-HTMLCol, Get-ContentFromHTMLTemplate, Get-ErrorReporting, Get-CopyByBITS, Show-OpenDialog, Import-ModuleRemotely, Invoke-PSScriptBlock, Get-ACLArray, Set-PSModuleManifest, Get-VarToString, Get-UniqueArrayMembers, Resolve-IPtoFQDNinArray, Get-HelpersData, Get-DifferenceBetweenArrays, Test-Credentials
+Export-ModuleMember -Function Get-NewAESKey, Import-SettingsFromFile, Get-VarFromAESFile, Set-VarToAESFile, Disconnect-VPN, Connect-VPN, Add-ToLog, Restart-Switches, Restart-SwitchInInterval, Get-EventList, Send-Email, Start-PSScript, Restart-LocalHostInInterval, Show-Notification, Get-Logger, Restart-ServiceInInterval, Set-TelegramMessage, Initialize-Logging, Get-SettingsFromFile, Get-HTMLTable, Get-HTMLCol, Get-ContentFromHTMLTemplate, Get-ErrorReporting, Get-CopyByBITS, Show-OpenDialog, Import-ModuleRemotely, Invoke-PSScriptBlock, Get-ACLArray, Set-PSModuleManifest, Get-VarToString, Get-UniqueArrayMembers, Resolve-IPtoFQDNinArray, Get-HelpersData, Get-DifferenceBetweenArrays, Test-Credentials
