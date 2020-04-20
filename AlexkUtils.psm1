@@ -208,11 +208,20 @@ Function Add-ToLog {
         [switch] $Display,
         [Parameter(Mandatory = $false, Position = 4, HelpMessage = "Message status." )]
         [ValidateSet("Info", "Warning", "Error")]
-        [string] $Status
+        [string] $Status,
+        [Parameter(Mandatory = $false, Position = 5, HelpMessage = "Date format string." )]
+        [string] $Format
+
     )
 
-    $Date = Get-Date
-    $Text = ($Date.ToString() + " " + $Message)
+    if($Format) {
+        $Date = Get-Date -Format $Format
+    }
+    Else {
+        $Date = Get-Date
+    }
+    
+    $Text = ($Date.ToString()  + " " + $Message)
     switch ($Mode.ToLower()) {
         "append" { Out-File -FilePath $logFilePath -Encoding utf8 -Append -Force -InputObject $Text }
         "replace" { Out-File -FilePath $logFilePath -Encoding utf8 -Force -InputObject $Text }
@@ -586,7 +595,7 @@ Function Start-PSScript {
     }
 
     if (!$PSCommand) {
-        $Arguments = "-WindowStyle Hidden -NonInteractive -file ""$ScriptPath""" # -Executionpolicy unrestricted
+        $Arguments = "-NoProfile -WindowStyle Hidden -NonInteractive -file ""$ScriptPath""" # -Executionpolicy unrestricted
     }
     else {
         $Arguments = "-NoNewWindow -WindowStyle Hidden -NonInteractive -Command  ""& {$PSCommand}""" # -Executionpolicy unrestricted
@@ -610,19 +619,19 @@ Function Start-PSScript {
             Add-ToLog "Start script  $ScriptPath" $logFilePath 
             
             if ($Credentials) {
-                $Res = Start-Process -FilePath "$PowerShellPrgPath" -ArgumentList $Arguments -Credential $Credentials -PassThru -Wait
+                $Res = Start-Process -FilePath $PowerShellPrgPath -ArgumentList $Arguments -Credential $Credentials -PassThru -Wait
             }  
             Else {
-                $Res = Start-Process -FilePath "$PowerShellPrgPath" -ArgumentList $Arguments -PassThru -Wait
+                $Res = Start-Process -FilePath $PowerShellPrgPath -ArgumentList $Arguments -PassThru -Wait
             }                
         }
     }
     else {
         if ($Credentials) {
-            $Res = Start-Process -FilePath "$PowerShellPrgPath" -ArgumentList $Arguments -Credential $Credentials -PassThru -Wait
+            $Res = Start-Process -FilePath $PowerShellPrgPath -ArgumentList $Arguments -Credential $Credentials -PassThru -Wait
         }  
         Else {
-            $Res = Start-Process -FilePath "$PowerShellPrgPath" -ArgumentList $Arguments -PassThru -Wait
+            $Res = Start-Process -FilePath $PowerShellPrgPath -ArgumentList $Arguments -PassThru -Wait
         } 
     }
     Return $Res
@@ -832,7 +841,7 @@ function Get-Logger {
             [string]$String      
         )
         "$( Get-Date -Format 'yyyy-MM-dd HH:mm:ss' ) [Error] $String" | Out-File $this.LogPath -Append -Encoding utf8
-    }
+    }    
     return $Logger
 }
 Function Restart-ServiceInInterval {
@@ -973,7 +982,7 @@ function Initialize-Logging {
     }
     else {
             $Global:ErrorActionPreference = 'Stop'
-    }    
+    }
 }
 function Get-SettingsFromFile {
 #Get-Vars
