@@ -634,7 +634,7 @@ Function Start-PSScript {
 
     if ($ScriptBlock) {
         if ($ScriptBlockArguments){
-            $Command = "& {Invoke-Command -ScriptBlock {$ScriptBlock} -ArgumentList $($ScriptBlockArguments -join ", ")}"
+            $Command = "Invoke-Command -ScriptBlock {$ScriptBlock} -ArgumentList $($ScriptBlockArguments -join ", ")"
             #$Arguments += " -ExecutionPolicy Bypass –NoProfile -Command $Command"
         }
         Else{    
@@ -649,7 +649,13 @@ Function Start-PSScript {
         if($Credentials){
             if ($DebugRun){
                 [string]$NestedScriptBlock = {
-                    param([string]$Test, $ScriptBlock);  write-host $Test;  Write-Host $ScriptBlock;  $Res = Start-PSScript -ScriptBlock $ScriptBlock -logFilePath '%LogFilePath%' -DebugRun -Evaluate;    $Res
+                    param([string]$Test, [string]$logFilePath, [scriptblock]$ScriptBlock)
+                    
+                    write-host $Test
+                    Write-Host $ScriptBlock
+                    start-sleep 10
+                    $Res = Start-PSScript -ScriptBlock $ScriptBlock -logFilePath $logFilePath -DebugRun -Evaluate
+                    $Res
                 }
                 $OutputXMLPath     = "$ProjectRoot\$DATAFolder\ScriptBlockOutput.xml"
                 [string]$End = {
@@ -663,10 +669,12 @@ Function Start-PSScript {
                 $NestedScriptBlock = $NestedScriptBlock.Replace("%OutputXMLPath%", $OutputXMLPath)
                 $NestedScriptBlock = $NestedScriptBlock.Replace("%DATAFolder%", $DATAFolder)
                 write-host $NestedScriptBlock                
-                [scriptblock]$NestedScriptBlock = [scriptblock]::Create($NestedScriptBlock)
+                [scriptblock]$NestedScriptBlock = [scriptblock]::Create($NestedScriptBlock)                
                 $Test = "'Some test string!'"
-                [array]$SBArgs += "($Test)"
-                [array]$SBArgs += "($ScriptBlock)"
+
+                [array]$SBArgs += $Test
+                [array]$SBArgs += "'$logFilePath'"
+                [array]$SBArgs += $ScriptBlock                
                
                 Start-PSScript -ScriptBlock $NestedScriptBlock -ScriptBlockArguments $SBArgs -logFilePath $logFilePath -Credentials $Credentials -DebugRun
             }
