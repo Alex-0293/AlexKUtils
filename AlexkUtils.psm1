@@ -574,18 +574,20 @@ Function Start-PSScript {
         [string] $ScriptPath,
         [Parameter(Mandatory = $true, Position = 1, HelpMessage = "Script block to execute." , ParameterSetName = "ScriptBlock" )]
         [scriptblock] $ScriptBlock,
-        [Parameter(Mandatory = $false, Position = 2, HelpMessage = "Credentials." )]
+        [Parameter(Mandatory = $false, Position = 2, HelpMessage = "Script block arguments." , ParameterSetName = "ScriptBlock" )]
+        [Array] $ScriptBlockArguments,
+        [Parameter(Mandatory = $false, Position = 3, HelpMessage = "Credentials." )]
         [System.Management.Automation.PSCredential]  $Credentials, 
-        [Parameter(Mandatory = $true, Position = 3, HelpMessage = "Log file path." )]
+        [Parameter(Mandatory = $true, Position = 4, HelpMessage = "Log file path." )]
         [ValidateNotNullOrEmpty()] 
         [string] $logFilePath,
-        [Parameter(Mandatory = $false, Position = 4, HelpMessage = "Output file path." )]
+        [Parameter(Mandatory = $false, Position = 5, HelpMessage = "Output file path." )]
         [string] $OutputFilePath,
-        [Parameter(Mandatory = $false, Position = 5, HelpMessage = "Working directory." )]
+        [Parameter(Mandatory = $false, Position = 6, HelpMessage = "Working directory." )]
         [string] $WorkDir,
-        [Parameter(Mandatory = $false, Position = 6, HelpMessage = "Use elevated rights." )]
+        [Parameter(Mandatory = $false, Position = 7, HelpMessage = "Use elevated rights." )]
         [switch]   $Evaluate,
-        [Parameter(Mandatory = $false, Position = 7, HelpMessage = "Debug run." )]
+        [Parameter(Mandatory = $false, Position = 8, HelpMessage = "Debug run." )]
         [switch]   $DebugRun             
     )    
 <#
@@ -631,7 +633,13 @@ Function Start-PSScript {
     }      
 
     if ($ScriptBlock) {
-        $Arguments += " -ExecutionPolicy Bypass –NoProfile  -Command $ScriptBlock"            
+        if ($ScriptBlockArguments){
+            $Command = "& {Invoke-Command -ScriptBlock {$ScriptBlock} -ArgumentList $($ScriptBlockArguments -join ", ")}"
+            #$Arguments += " -ExecutionPolicy Bypass –NoProfile -Command $Command"
+        }
+        Else{    
+            $Arguments += " -ExecutionPolicy Bypass –NoProfile  -Command $ScriptBlock"      
+        }      
     }
     else {
         $Arguments += " -ExecutionPolicy Bypass –NoProfile  -file ""$ScriptPath"""     
@@ -641,9 +649,7 @@ Function Start-PSScript {
         if($Credentials){
             if ($DebugRun){
                 [string]$NestedScriptBlock = {
-                    $ScriptBlock = {%ScriptBlock%}                    
-                    $Res = Start-PSScript -ScriptBlock $ScriptBlock -logFilePath "%LogFilePath%" -DebugRun -Evaluate
-                    $Res
+                    param([string]$Test, $ScriptBlock);  write-host $Test;  Write-Host $ScriptBlock;  $Res = Start-PSScript -ScriptBlock $ScriptBlock -logFilePath '%LogFilePath%' -DebugRun -Evaluate;    $Res
                 }
                 $OutputXMLPath     = "$ProjectRoot\$DATAFolder\ScriptBlockOutput.xml"
                 [string]$End = {
@@ -656,9 +662,13 @@ Function Start-PSScript {
                 $NestedScriptBlock = $NestedScriptBlock.Replace("%LogFilePath%", $logFilePath)
                 $NestedScriptBlock = $NestedScriptBlock.Replace("%OutputXMLPath%", $OutputXMLPath)
                 $NestedScriptBlock = $NestedScriptBlock.Replace("%DATAFolder%", $DATAFolder)
-                write-host $NestedScriptBlock
+                write-host $NestedScriptBlock                
                 [scriptblock]$NestedScriptBlock = [scriptblock]::Create($NestedScriptBlock)
-                Start-PSScript -ScriptBlock $NestedScriptBlock -logFilePath $logFilePath -Credentials $Credentials -DebugRun
+                $Test = "'Some test string!'"
+                [array]$SBArgs += "($Test)"
+                [array]$SBArgs += "($ScriptBlock)"
+               
+                Start-PSScript -ScriptBlock $NestedScriptBlock -ScriptBlockArguments $SBArgs -logFilePath $logFilePath -Credentials $Credentials -DebugRun
             }
             Else{
                 [string]$NestedScriptBlock = {
@@ -685,7 +695,15 @@ Function Start-PSScript {
     Else  {
         if ($Credentials) {
             Add-ToLog "Start script [$ScriptPath] as [$($Credentials.UserName)]." $logFilePath  
-            $Res = Start-Process -FilePath $PowerShellPrgPath -Credential $Credentials -ArgumentList $Arguments -PassThru                              
+            
+            if ($Command){
+                $ToRun = "`$Command = `"$Command`" `n`nStart-Process -FilePath `"$PowerShellPrgPath`" -PassThru -ArgumentList `"$Arguments -Command $Command`""
+                $ToRun | out-file -path "C:\DATA\Projects\EventLogsAnalyzer\LOGS\text.ps1" -force
+                $Res = Start-Process -FilePath "`"$PowerShellPrgPath`"" -Credential $Credentials -PassThru -ArgumentList "$Arguments -Command $Command"
+            }
+            Else {
+                $Res = Start-Process -FilePath "`"$PowerShellPrgPath`"" -Credential $Credentials -PassThru -ArgumentList $Arguments
+            }
             $Res.WaitForExit()               
         }  
         Else {
