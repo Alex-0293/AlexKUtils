@@ -1285,7 +1285,7 @@ function Get-ErrorReporting {
     $Message = $Message.Replace("`r", "")
     $Global:Logger.AddErrorRecord( $Message )
 
-    Write-Host "SCRIPT EXIT DUE TO ERROR!!!" -ForegroundColor Red
+    Write-Host "$(Get-date) SCRIPT EXIT DUE TO ERROR!!!" -ForegroundColor Red
     Write-Host "====================================================================================================================================================" -ForegroundColor Red
     Write-Host $ToScreen -ForegroundColor Blue
     Write-Host "Stack trace:" -ForegroundColor green     
@@ -1582,12 +1582,15 @@ Function Show-OpenDialog{
             $File.Filter           = $FileFilter
             $File.ShowHelp         = $true
             $File.MultiSelect      = $FileMultiSelect
+            $File.Title            = $Description
             $File.ShowDialog() | Out-Null
             if ($File.MultiSelect) { return $File.FileNames } else { return $File.FileName }  
         }
         "folder" {  
-            $Folder = New-Object Windows.Forms.FolderBrowserDialog
-            $Folder.SelectedPath = $InitPath
+            $Folder                        = New-Object Windows.Forms.FolderBrowserDialog
+            $Folder.SelectedPath           = $InitPath
+            $Folder.Description            = $Description
+            $Folder.UseDescriptionForTitle = $true
             $Folder.ShowDialog() | Out-Null
             return $Folder.SelectedPath 
         }
@@ -1757,27 +1760,41 @@ function Get-ACLArray {
             [array]$Array = @()
         $Type = $Using:Type
         switch ($Type.tolower()) {
-            "all" { $ACLItems = Get-ChildItem -Path $Using:Path -Recurse | Sort-Object FullName }
-            "folder" { $ACLItems = Get-ChildItem -Path $Using:Path -Recurse -Directory | Sort-Object FullName }
+            "all" { 
+                $ACLItems = Get-ChildItem -Path $Using:Path -Recurse | Sort-Object FullName
+                $Root = Get-Item -Path $Using:Path
+                $ACLItems += $Root 
+            }
+            "folder" { 
+                $ACLItems = Get-ChildItem -Path $Using:Path -Recurse -Directory | Sort-Object FullName
+                $Root = Get-Item -Path $Using:Path
+                $ACLItems += $Root 
+            }
             "file" { $ACLItems = Get-ChildItem -Path $Using:Path -Recurse -File | Sort-Object FullName }
             Default { }
         }
         
+       
 
         foreach ($Item1 in $ACLItems) {
             $Acl = Get-Acl -Path $Item1.FullName
             #$Acl | Select-Object -ExpandProperty Access    
             foreach ($item in ($Acl | Select-Object -ExpandProperty Access)) {
-                [string]$Parent = $Item1.Parent
+                $ParentPath = split-path -path (split-path -path $Item1.FullName -Parent) -leaf
+                If ((Split-Path -path $Using:Path -leaf) -eq $ParentPath) {
+                    $ParentPath = ""
+                }
                 $PSO = [PSCustomObject]@{
                     AbsolutePath      = $Item1.FullName
                     Path              = $Item1.FullName.Replace($Using:Path, "")
-                    ParentPath        = $Parent.Replace($Using:Path, "")
+                    ParentPath        = $ParentPath
+                    BaseName          = $Item1.BaseName
+                    Extension         = $Item1.Extension
                     Owner             = $Acl.Owner
                     Group             = $Acl.Group
                     FileSystemRights  = $item.FileSystemRights
                     AccessControlType = $item.AccessControlType
-                    IdentityReference = $item.IdentityReference
+                    IdentityReference = [string]$item.IdentityReference.value
                     IsInherited       = $item.IsInherited
                     InheritanceFlags  = $item.InheritanceFlags
                     PropagationFlags  = $item.PropagationFlags
@@ -1968,7 +1985,7 @@ Function Get-DifferenceBetweenArrays {
         [Parameter( Mandatory = $true, Position = 0, HelpMessage = "First array." )]
         [ValidateNotNullOrEmpty()]
         [Array] $FirstArray,
-        [Parameter( Mandatory = $true, Position = 0, HelpMessage = "Second array." )]
+        [Parameter( Mandatory = $true, Position = 1, HelpMessage = "Second array." )]
         [ValidateNotNullOrEmpty()]
         [Array] $SecondArray
     )  
@@ -2009,17 +2026,23 @@ Function Get-DifferenceBetweenArrays {
     if ($NoteProperties1WithTypeText -eq $NoteProperties2WithTypeText) {
         foreach ($Item in $SecondArray ) {
             $NotExist = $True
-            foreach ($Item1 in $FirstArray) {                
+            foreach ($Item1 in $FirstArray) {                  
+                #Write-Host $Item 
+                #Write-Host $Item1 
+                #Write-host ""
                 $ColumnEqual = $True
                 foreach ($Column in  $Columns) {                    
-                    if ($Item.$Column -ne $item1.$Column) {
+                    if ([string]$Item.$Column -ne [string]$item1.$Column) {
+                        #write-host $Item.$Column  
+                        #Write-Host $Item1.$Column 
                         $ColumnEqual = $False                 
                     } 
                 } 
                 if ($ColumnEqual) {
-                    $NotExist = $False    
+                    $NotExist = $False   
                     break 
-                }              
+                }    
+ 
             } 
             If ($NotExist) {
                 $Res += $item
@@ -2033,7 +2056,6 @@ Function Get-DifferenceBetweenArrays {
     }
     
 }
-
 function Test-Credentials {
      <#
     .SYNOPSIS 
@@ -2089,5 +2111,42 @@ function Test-Credentials {
         }
     }
 }
+Function Convert-FSPath {
+    <#
+    .SYNOPSIS 
+        .AUTHOR Alexk
+        .DATE 29.04.2020
+        .VER 1   
+    .DESCRIPTION
+     Function to convert path from UNC to local or from local to UNC.
+    .EXAMPLE
+    Convert-FSPath -CurrentPath "d:\test"
+#>  
+    [CmdletBinding()]
+    param
+    (
+        [Parameter( Mandatory = $true, Position = 0, HelpMessage = "Full path in UNC or local." )]
+        [string] $CurrentPath,
+        [Parameter( Mandatory = $false, Position = 1, HelpMessage = "Remote host name." )]
+        [string] $Computer
+    )
+    if ($Computer) { 
+        #Convert to UNC.
+        if (!($CurrentPath.Contains("\\")) -and ($CurrentPath.Contains(":"))) {
+            $Res = "\\$Computer\$($CurrentPath.Replace(":","$"))"
+        }
+        Else {
 
-Export-ModuleMember -Function Get-NewAESKey, Import-SettingsFromFile, Get-VarFromAESFile, Set-VarToAESFile, Disconnect-VPN, Connect-VPN, Add-ToLog, Restart-Switches, Restart-SwitchInInterval, Get-EventList, Send-Email, Start-PSScript, Restart-LocalHostInInterval, Show-Notification, Get-Logger, Restart-ServiceInInterval, Set-TelegramMessage, Initialize-Logging, Get-SettingsFromFile, Get-HTMLTable, Get-HTMLCol, Get-ContentFromHTMLTemplate, Get-ErrorReporting, Get-CopyByBITS, Show-OpenDialog, Import-ModuleRemotely, Invoke-PSScriptBlock, Get-ACLArray, Set-PSModuleManifest, Get-VarToString, Get-UniqueArrayMembers, Resolve-IPtoFQDNinArray, Get-HelpersData, Get-DifferenceBetweenArrays, Test-Credentials
+        }
+    }
+    Else {
+        if (!($CurrentPath.Contains(":")) -and ($CurrentPath.Contains("\\"))) {
+            $Array = $CurrentPath.Split("\") 
+            $Array = $Array | Select-Object -Last ($Array.count - 3) 
+            $Res = ($array -join "\").replace("$", ":")            
+        }
+    }
+    return $Res
+}
+
+Export-ModuleMember -Function Get-NewAESKey, Import-SettingsFromFile, Get-VarFromAESFile, Set-VarToAESFile, Disconnect-VPN, Connect-VPN, Add-ToLog, Restart-Switches, Restart-SwitchInInterval, Get-EventList, Send-Email, Start-PSScript, Restart-LocalHostInInterval, Show-Notification, Get-Logger, Restart-ServiceInInterval, Set-TelegramMessage, Initialize-Logging, Get-SettingsFromFile, Get-HTMLTable, Get-HTMLCol, Get-ContentFromHTMLTemplate, Get-ErrorReporting, Get-CopyByBITS, Show-OpenDialog, Import-ModuleRemotely, Invoke-PSScriptBlock, Get-ACLArray, Set-PSModuleManifest, Get-VarToString, Get-UniqueArrayMembers, Resolve-IPtoFQDNinArray, Get-HelpersData, Get-DifferenceBetweenArrays, Test-Credentials, Convert-FSPath
