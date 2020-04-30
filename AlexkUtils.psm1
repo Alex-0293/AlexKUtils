@@ -231,13 +231,13 @@ Function Add-ToLog {
        if($status){ 
             switch ($Status) {
                 "Info" { 
-                    Write-Host $Message -ForegroundColor Green
+                    Write-Host $Text  -ForegroundColor Green
                  }
                  "Warning" { 
-                    Write-Host $Message -ForegroundColor Yellow
+                    Write-Host $Text  -ForegroundColor Yellow
                  }
                  "Error" { 
-                    Write-Host $Message -ForegroundColor Red
+                    Write-Host $Text  -ForegroundColor Red
                  }
                 Default {}
             }
