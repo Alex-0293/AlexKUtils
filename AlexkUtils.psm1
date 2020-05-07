@@ -210,7 +210,9 @@ Function Add-ToLog {
         [ValidateSet("Info", "Warning", "Error")]
         [string] $Status,
         [Parameter(Mandatory = $false, Position = 5, HelpMessage = "Date format string." )]
-        [string] $Format
+        [string] $Format,
+        [Parameter(Mandatory = $false, Position =6, HelpMessage = "Level in string hierarchy." )]
+        [int16] $Level
 
     )
 
@@ -221,7 +223,16 @@ Function Add-ToLog {
         $Date = Get-Date
     }
     
-    $Text = ($Date.ToString()  + " " + $Message)
+    [string]$LevelText = ""
+    if ($Level){
+        [string]$LevelSign       = " "
+        $LevelMultiplier = 4
+        for ($i = 0; $i -lt ($Level * $LevelMultiplier); $i++) {
+            $LevelText += $LevelSign
+        }        
+    }
+    
+    $Text = ($Date.ToString()  + " $LevelText" + $Message)
     switch ($Mode.ToLower()) {
         "append" { Out-File -FilePath $logFilePath -Encoding utf8 -Append -Force -InputObject $Text }
         "replace" { Out-File -FilePath $logFilePath -Encoding utf8 -Force -InputObject $Text }
@@ -243,7 +254,7 @@ Function Add-ToLog {
             }
        }
        Else{
-            Write-Host $Message 
+            Write-Host $Text 
        }
 
     }
@@ -574,19 +585,23 @@ Function Start-PSScript {
         [string] $ScriptPath,
         [Parameter(Mandatory = $true, Position = 1, HelpMessage = "Script block to execute." , ParameterSetName = "ScriptBlock" )]
         [scriptblock] $ScriptBlock,
-        [Parameter(Mandatory = $false, Position = 2, HelpMessage = "Credentials." )]
+        [Parameter(Mandatory = $false, Position = 2, HelpMessage = "Arguments." )]
+        [string] $Arguments,
+        [Parameter(Mandatory = $false, Position = 3, HelpMessage = "Credentials." )]
         [System.Management.Automation.PSCredential]  $Credentials, 
-        [Parameter(Mandatory = $true, Position = 3, HelpMessage = "Log file path." )]
+        [Parameter(Mandatory = $true, Position = 4, HelpMessage = "Log file path." )]
         [ValidateNotNullOrEmpty()] 
         [string] $logFilePath,
-        [Parameter(Mandatory = $false, Position = 4, HelpMessage = "Output file path." )]
+        [Parameter(Mandatory = $false, Position = 5, HelpMessage = "Output file path." )]
         [string] $OutputFilePath,
-        [Parameter(Mandatory = $false, Position = 5, HelpMessage = "Working directory." )]
+        [Parameter(Mandatory = $false, Position = 6, HelpMessage = "Working directory." )]
         [string] $WorkDir,
-        [Parameter(Mandatory = $false, Position = 6, HelpMessage = "Use elevated rights." )]
+        [Parameter(Mandatory = $false, Position = 7, HelpMessage = "Use elevated rights." )]
         [switch]   $Evaluate,
-        [Parameter(Mandatory = $false, Position = 7, HelpMessage = "Debug run." )]
-        [switch]   $DebugRun             
+        [Parameter(Mandatory = $false, Position = 8, HelpMessage = "Debug run." )]
+        [switch]   $DebugRun,
+        [Parameter(Mandatory = $false, Position = 9, HelpMessage = "Wait for result." )]
+        [switch]   $Wait              
     )    
 <#
     1	-EncodedCommand <Base64EncodedCommand>	Accepts a base-64-encoded string version of a command. This is useful when you need to submit Powershell commands with complex quotation marks or curly braces
@@ -616,7 +631,7 @@ Function Start-PSScript {
     }
 
     if ($OutputFilePath) {
-        $Arguments += " -RedirectStandardOutput ""$OutputFilePath""" 
+        $AllArguments += " -RedirectStandardOutput ""$OutputFilePath""" 
     }
 
     if ($Evaluate) {
@@ -624,18 +639,22 @@ Function Start-PSScript {
     }
 
     if ($DebugRun){
-        $Arguments = " -NoExit"        
+        $AllArguments = " -NoExit"        
     }
     Else {     
-        $Arguments = " -WindowStyle Hidden -NonInteractive -NoLogo"
+        $AllArguments = " -WindowStyle Hidden -NonInteractive -NoLogo"
     }      
 
     if ($ScriptBlock) {
-        $Arguments += " -ExecutionPolicy Bypass –NoProfile  -Command $ScriptBlock"            
+        $AllArguments += " -ExecutionPolicy Bypass –NoProfile -Command $ScriptBlock"            
     }
     else {
-        $Arguments += " -ExecutionPolicy Bypass –NoProfile  -file ""$ScriptPath"""     
+        $AllArguments += " -ExecutionPolicy Bypass –NoProfile -file ""$ScriptPath"""     
     } 
+
+    if($Arguments){
+       $AllArguments += " $Arguments"
+    }
 
     if ($Evaluate -and (($Credentials) -or ($OutputFilePath) )) {
         if($Credentials){
@@ -684,18 +703,33 @@ Function Start-PSScript {
     }
     Else  {
         if ($Credentials) {
-            Add-ToLog "Start script [$ScriptPath] as [$($Credentials.UserName)]." $logFilePath  
-            $Res = Start-Process -FilePath $PowerShellPrgPath -Credential $Credentials -ArgumentList $Arguments -PassThru                              
-            $Res.WaitForExit()               
-        }  
-        Else {
-            if($Evaluate){
-                Add-ToLog "Start script [$ScriptPath] with evaluate." $logFilePath 
-                $Res = Start-Process -FilePath $PowerShellPrgPath -Verb $Verb -ArgumentList $Arguments -PassThru -Wait
+            Add-ToLog -Message "Start script [$ScriptPath] as [$($Credentials.UserName)]." -logFilePath $logFilePath -Display -Status "Info"  -level 1
+            if ($Wait){
+                $Res = Start-Process -FilePath $PowerShellPrgPath -Credential $Credentials -ArgumentList $AllArguments -PassThru
+                $Res.WaitForExit()
             }
             Else {
-                Add-ToLog "Start script [$ScriptPath]." $logFilePath 
-                $Res = Start-Process -FilePath $PowerShellPrgPath  -ArgumentList $Arguments -PassThru -Wait
+                $Res = Start-Process -FilePath $PowerShellPrgPath -Credential $Credentials -ArgumentList $AllArguments -PassThru
+            }                             
+        }  
+        Else {
+            if($Evaluate){                
+                Add-ToLog -Message "Start script [$ScriptPath] with evaluate." -logFilePath $logFilePath -Display -Status "Info"  -level 1
+                if ($Wait){
+                    $Res = Start-Process -FilePath $PowerShellPrgPath -Verb $Verb -ArgumentList $AllArguments -PassThru -Wait
+                }
+                Else {
+                    $Res = Start-Process -FilePath $PowerShellPrgPath -Verb $Verb -ArgumentList $AllArguments -PassThru
+                }
+            }
+            Else {
+                Add-ToLog -Message "Start script [$ScriptPath]." -logFilePath $logFilePath -Display -Status "Info"  -level 1
+                if ($Wait){ 
+                    $Res = Start-Process -FilePath $PowerShellPrgPath  -ArgumentList $AllArguments -PassThru -Wait
+                }
+                Else {
+                    $Res = Start-Process -FilePath $PowerShellPrgPath  -ArgumentList $AllArguments -PassThru
+                }
             }
         }   
     }
@@ -2147,6 +2181,49 @@ Function Convert-FSPath {
         }
     }
     return $Res
+}
+
+Function Invoke-CommandWithDebug {
+    <#
+    .SYNOPSIS 
+        .AUTHOR Alexk
+        .DATE 05.05.2020
+        .VER 1   
+    .DESCRIPTION
+     Function to invoke command or script with debug info.
+    .EXAMPLE
+    Invoke-CommandWithDebug -EventLogScriptPath "d:\test\events.ps1" -ScriptPath $ScriptPath 
+#>  
+    [CmdletBinding()]
+    param
+    (
+        [Parameter( Mandatory = $true, Position = 0, HelpMessage = "Full path to EventLogAnalyzer script." )]
+        [ValidateNotNullOrEmpty()]
+        [string] $EventLogScriptPath,
+        [Parameter( Mandatory = $true, Position = 1, HelpMessage = "PS script path.", ParameterSetName = "Script" )]
+        [ValidateNotNullOrEmpty()]        
+        [string] $ScriptPath,
+        [Parameter( Mandatory = $true, Position = 2, HelpMessage = "Scriptblock.", ParameterSetName = "ScriptBlock"  )]
+        [ValidateNotNullOrEmpty()]
+        [scriptblock] $ScriptBlock,
+        [Parameter( Mandatory = $false, Position = 3, HelpMessage = "Arguments." )]
+        [string] $Arguments
+    )
+    
+    $StartTime = Get-Date
+    $Res       = Start-PSScript -ScriptPath $ScriptPath -Arguments $Arguments -logFilePath $ScriptLogFilePath -DebugRun
+    $EndTime   = Get-Date
+
+    $Culture = Get-Culture 
+
+    [string]$Start = Get-Date $StartTime -format ($Culture.DateTimeFormat.SortableDateTimePattern )
+    [string]$End   = get-date $EndTime   -format ($Culture.DateTimeFormat.SortableDateTimePattern )
+    $ExportPath    = ""
+
+    [string]$EventLogScriptPathArguments  = " -Start `"$Start`" -End `"$End`" -ExportPAth `"$ExportPath`""
+
+    Start-PSScript -ScriptPath $EventLogScriptPath -Arguments $EventLogScriptPathArguments -logFilePath $ScriptLogFilePath
+
 }
 
 Export-ModuleMember -Function Get-NewAESKey, Import-SettingsFromFile, Get-VarFromAESFile, Set-VarToAESFile, Disconnect-VPN, Connect-VPN, Add-ToLog, Restart-Switches, Restart-SwitchInInterval, Get-EventList, Send-Email, Start-PSScript, Restart-LocalHostInInterval, Show-Notification, Get-Logger, Restart-ServiceInInterval, Set-TelegramMessage, Initialize-Logging, Get-SettingsFromFile, Get-HTMLTable, Get-HTMLCol, Get-ContentFromHTMLTemplate, Get-ErrorReporting, Get-CopyByBITS, Show-OpenDialog, Import-ModuleRemotely, Invoke-PSScriptBlock, Get-ACLArray, Set-PSModuleManifest, Get-VarToString, Get-UniqueArrayMembers, Resolve-IPtoFQDNinArray, Get-HelpersData, Get-DifferenceBetweenArrays, Test-Credentials, Convert-FSPath
