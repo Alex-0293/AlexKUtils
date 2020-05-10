@@ -216,6 +216,21 @@ Function Add-ToLog {
 
     )
 
+    if($ScriptLocalHost -ne $Env:COMPUTERNAME){
+        $Remote  = $true
+        $Message = "Remote [$($Env:COMPUTERNAME)]. $Message"
+        $Hash = @{
+            Message     = $Message
+            logFilePath = $logFilePath
+            Mode        = $Mode
+            Display     = $false
+            Status      = $Status
+            Format      = $Format
+            Level       = $Level
+        }
+        $Global:LogBuffer +=$Hash
+    }
+
     if($Format) {
         $Date = Get-Date -Format $Format
     }
@@ -233,10 +248,17 @@ Function Add-ToLog {
     }
     
     $Text = ($Date.ToString()  + " $LevelText" + $Message)
-    switch ($Mode.ToLower()) {
-        "append" { Out-File -FilePath $logFilePath -Encoding utf8 -Append -Force -InputObject $Text }
-        "replace" { Out-File -FilePath $logFilePath -Encoding utf8 -Force -InputObject $Text }
-        Default { }    
+
+    if ( -not $remote){
+        switch ($Mode.ToLower()) {
+            "append" { 
+                Out-File -FilePath $logFilePath -Encoding utf8 -Append -Force -InputObject $Text
+            }
+            "replace" {
+                Out-File -FilePath $logFilePath -Encoding utf8 -Force -InputObject $Text
+            }
+            Default { }    
+        }
     }
     If ($Display){
        if($status){ 
@@ -601,7 +623,9 @@ Function Start-PSScript {
         [Parameter(Mandatory = $false, Position = 8, HelpMessage = "Debug run." )]
         [switch]   $DebugRun,
         [Parameter(Mandatory = $false, Position = 9, HelpMessage = "Wait for result." )]
-        [switch]   $Wait              
+        [switch]   $Wait,
+        [Parameter(Mandatory = $false, Position = 10, HelpMessage = "Program path to execute." )]
+        [string]   $Program = "C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe"               
     )    
 <#
     1	-EncodedCommand <Base64EncodedCommand>	Accepts a base-64-encoded string version of a command. This is useful when you need to submit Powershell commands with complex quotation marks or curly braces
@@ -621,119 +645,193 @@ Function Start-PSScript {
     15	-Command 	Executes the command specified. The value of Command can be “-“, a string. or a script block. Script blocks must be enclosed in braces ({})
     16	-Help, -?, /? 	Displays help for PowerShell.exe. You can use PowerShell.exe -Help, PowerShell.exe -? or PowerShell.exe /?
 #>
+    if ($ScriptPath){
+        $Message               = "Starting powershell script [$ScriptPath]" 
+    }
+    if ($ScriptBlock){
+        $Message               = "Starting powershell scriptblock" 
+    }
+    $StartProcessArguments = @{
+        FilePath = $Program
+        PassThru = $True
+    }
+    if ($DebugRun){
+        $PowershellArguments += " -NoExit"        
+    }
+    Else {     
+        $PowershellArguments += " -NonInteractive -NoLogo"
+    }    
+    if ($ScriptBlock) {
+        $PowershellArguments += " -ExecutionPolicy Bypass –NoProfile -Command $ScriptBlock"            
+    }
+    else {
+        $PowershellArguments += " -ExecutionPolicy Bypass –NoProfile -file `"$ScriptPath`""     
+    }
+    if($Arguments){
+        $PowershellArguments += " $Arguments"
+    }
+      
+    if ($Evaluate -and (($Credentials) -or ($OutputFilePath) )) {
+        # if($Credentials){
+        #     if ($DebugRun){
+        #         [string]$NestedScriptBlock = {
+        #             $ScriptBlock = {%ScriptBlock%}                    
+        #             $Res = Start-PSScript -ScriptBlock $ScriptBlock -logFilePath "%LogFilePath%" -DebugRun -Evaluate
+        #             $Res
+        #         }
+        #         $OutputXMLPath     = "$ProjectRoot\$DATAFolder\ScriptBlockOutput.xml"
+        #         [string]$End = {
+        #             if($Res){
+        #                 $Res | Export-Clixml -path "%OutputXMLPath%" -Encoding utf8 -Force 
+        #             }
+        #         }                
+        #         $ScriptBlockNew    = [string]$ScriptBlock + $End
+        #         $NestedScriptBlock = $NestedScriptBlock.Replace("%ScriptBlock%", $ScriptBlockNew)
+        #         $NestedScriptBlock = $NestedScriptBlock.Replace("%LogFilePath%", $logFilePath)
+        #         $NestedScriptBlock = $NestedScriptBlock.Replace("%OutputXMLPath%", $OutputXMLPath)
+        #         $NestedScriptBlock = $NestedScriptBlock.Replace("%DATAFolder%", $DATAFolder)
+        #         write-host $NestedScriptBlock
+        #         [scriptblock]$NestedScriptBlock = [scriptblock]::Create($NestedScriptBlock)
+        #         Start-PSScript -ScriptBlock $NestedScriptBlock -logFilePath $logFilePath -Credentials $Credentials -DebugRun
+        #     }
+        #     Else{
+        #         [string]$NestedScriptBlock = {
+        #             $ScriptBlock = { %ScriptBlock% }                    
+        #             Start-PSScript -ScriptBlock $ScriptBlock -logFilePath "%LogFilePath%" -Evaluate
+        #         }
+        #         $OutputXMLPath = "$ProjectRoot\$DATAFolder\ScriptBlockOutput.xml"
+        #         [string]$End = {
+        #             if ($Res) {
+        #                 $Res | Export-Clixml -path "%OutputXMLPath%" -Encoding utf8 -Force 
+        #             }
+        #         }                
+        #         $ScriptBlockNew = [string]$ScriptBlock + $End
+        #         $NestedScriptBlock = $NestedScriptBlock.Replace("%ScriptBlock%", $ScriptBlockNew)
+        #         $NestedScriptBlock = $NestedScriptBlock.Replace("%LogFilePath%", $logFilePath)
+        #         $NestedScriptBlock = $NestedScriptBlock.Replace("%OutputXMLPath%", $OutputXMLPath)
+        #         $NestedScriptBlock = $NestedScriptBlock.Replace("%DATAFolder%", $DATAFolder)
+        #         [scriptblock]$NestedScriptBlock = [scriptblock]::Create($NestedScriptBlock)               
+                
+        #         Start-PSScript -ScriptBlock $NestedScriptBlock -logFilePath $logFilePath -Credentials $Credentials 
+        #     }
+        # }
+    }
+    Else  { 
+        Add-ToLog -Message "$Message." -logFilePath $logFilePath -Display -Status "Info"  -level 1
+        
+        $Params = @{
+            Program        = $Program
+            Arguments      = $PowershellArguments
+            Credentials    = $Credentials
+            LogFilePath    = $logFilePath
+            OutputFilePath = $OutputFilePath
+            WorkDir        = $WorkDir            
+        }
+        If ($Wait){
+            $Params += @{ Evaluate = $true }
+        }
+        If ($DebugRun){
+            $Params += @{ DebugRun = $true }
+        }
+        If ($Wait){
+            $Params += @{ Wait = $true }
+        }
 
-    [string] $PowerShellPrgPath = "C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe"   
+        $Res = Start-Program @Params      
+    }
+    Return $Res
+}
 
+Function Start-Program {
+    <#
+    .SYNOPSIS 
+        .AUTHOR Alexk
+        .DATE 10.05.2020
+        .VER 1   
+    .DESCRIPTION
+     Function to start os executable file.
+    .EXAMPLE
+    Start-Program -ScriptPath "c:\script.ps1" -logFilePath "c:\1.log""
+#>    
+    [CmdletBinding()]   
+    param (
+        [Parameter(Mandatory = $false, Position = 0, HelpMessage = "Program path to execute." )]
+        [ValidateNotNullOrEmpty()] 
+        [string]    $Program, 
+        [Parameter(Mandatory = $false, Position = 1, HelpMessage = "Arguments." )]
+        [string] $Arguments,
+        [Parameter(Mandatory = $false, Position = 2, HelpMessage = "Credentials." )]
+        [System.Management.Automation.PSCredential]  $Credentials, 
+        [Parameter(Mandatory = $true, Position = 3, HelpMessage = "Log file path." )]
+        [ValidateNotNullOrEmpty()] 
+        [string]    $LogFilePath,
+        [Parameter(Mandatory = $false, Position = 4, HelpMessage = "Output file path." )]
+        [string]    $OutputFilePath,
+        [Parameter(Mandatory = $false, Position = 5, HelpMessage = "Working directory." )]
+        [string]    $WorkDir,
+        [Parameter(Mandatory = $false, Position = 6, HelpMessage = "Use elevated rights." )]
+        [switch]    $Evaluate,
+        [Parameter(Mandatory = $false, Position = 7, HelpMessage = "Debug run." )]
+        [switch]    $DebugRun,
+        [Parameter(Mandatory = $false, Position = 8, HelpMessage = "Wait for result." )]
+        [switch]    $Wait                     
+    )    
+ 
+    $Message               = "Start program [$Program]" 
+    $StartProcessArguments = @{
+        FilePath = $Program
+        PassThru = $True
+    }
     if($Credentials){
         if(!(Test-Credentials $Credentials)){
             Write-Host "Supplied credentials [$($credentials.username)] error!" -ForegroundColor red            
         }
+        $Message               += " as [$($Credentials.UserName)]" 
+        $StartProcessArguments += @{ Credential = $Credentials }
     }
-
     if ($OutputFilePath) {
-        $AllArguments += " -RedirectStandardOutput ""$OutputFilePath""" 
+        $Message               += ", redirect output to [$OutputFilePath]"
+        $StartProcessArguments += @{ RedirectStandardOutput = "$OutputFilePath" }
     }
-
-    if ($Evaluate) {
-        $Verb = "RunAs" 
-    }
-
     if ($DebugRun){
-        $AllArguments = " -NoExit"        
+       $Message                += ", with debug" 
     }
-    Else {     
-        $AllArguments = " -WindowStyle Hidden -NonInteractive -NoLogo"
-    }      
-
-    if ($ScriptBlock) {
-        $AllArguments += " -ExecutionPolicy Bypass –NoProfile -Command $ScriptBlock"            
+    Else {
+       $StartProcessArguments  += @{ WindowStyle = "Hidden" }
+    }    
+    if ($Evaluate) {
+        $Message               += ", with evaluate" 
+        $StartProcessArguments += @{ Verb = "RunAs" }
+    }     
+    if ($WorkDir) {
+        $Message               += ", use work directory [$WorkDir]" 
+        $StartProcessArguments += @{ WorkingDirectory = "$WorkDir" }
     }
-    else {
-        $AllArguments += " -ExecutionPolicy Bypass –NoProfile -file ""$ScriptPath"""     
-    } 
-
-    if($Arguments){
-       $AllArguments += " $Arguments"
+    if ($Arguments){
+        $Message               += ", use arguments [$Arguments]" 
+        $StartProcessArguments += @{ ArgumentList = "$Arguments" }
     }
-
+       
     if ($Evaluate -and (($Credentials) -or ($OutputFilePath) )) {
-        if($Credentials){
-            if ($DebugRun){
-                [string]$NestedScriptBlock = {
-                    $ScriptBlock = {%ScriptBlock%}                    
-                    $Res = Start-PSScript -ScriptBlock $ScriptBlock -logFilePath "%LogFilePath%" -DebugRun -Evaluate
-                    $Res
-                }
-                $OutputXMLPath     = "$ProjectRoot\$DATAFolder\ScriptBlockOutput.xml"
-                [string]$End = {
-                    if($Res){
-                        $Res | Export-Clixml -path "%OutputXMLPath%" -Encoding utf8 -Force 
-                    }
-                }                
-                $ScriptBlockNew    = [string]$ScriptBlock + $End
-                $NestedScriptBlock = $NestedScriptBlock.Replace("%ScriptBlock%", $ScriptBlockNew)
-                $NestedScriptBlock = $NestedScriptBlock.Replace("%LogFilePath%", $logFilePath)
-                $NestedScriptBlock = $NestedScriptBlock.Replace("%OutputXMLPath%", $OutputXMLPath)
-                $NestedScriptBlock = $NestedScriptBlock.Replace("%DATAFolder%", $DATAFolder)
-                write-host $NestedScriptBlock
-                [scriptblock]$NestedScriptBlock = [scriptblock]::Create($NestedScriptBlock)
-                Start-PSScript -ScriptBlock $NestedScriptBlock -logFilePath $logFilePath -Credentials $Credentials -DebugRun
+        Write-host "In the future. Code in progress."             
+    }
+    Else  { 
+        Add-ToLog -Message "$Message." -logFilePath $logFilePath -Display -Status "Info"  -level 1
+        if ($Wait){            
+            if ($Credentials) {
+                $Res = Start-Process @StartProcessArguments
+                $Res.WaitForExit() 
             }
-            Else{
-                [string]$NestedScriptBlock = {
-                    $ScriptBlock = { %ScriptBlock% }                    
-                    Start-PSScript -ScriptBlock $ScriptBlock -logFilePath "%LogFilePath%" -Evaluate
-                }
-                $OutputXMLPath = "$ProjectRoot\$DATAFolder\ScriptBlockOutput.xml"
-                [string]$End = {
-                    if ($Res) {
-                        $Res | Export-Clixml -path "%OutputXMLPath%" -Encoding utf8 -Force 
-                    }
-                }                
-                $ScriptBlockNew = [string]$ScriptBlock + $End
-                $NestedScriptBlock = $NestedScriptBlock.Replace("%ScriptBlock%", $ScriptBlockNew)
-                $NestedScriptBlock = $NestedScriptBlock.Replace("%LogFilePath%", $logFilePath)
-                $NestedScriptBlock = $NestedScriptBlock.Replace("%OutputXMLPath%", $OutputXMLPath)
-                $NestedScriptBlock = $NestedScriptBlock.Replace("%DATAFolder%", $DATAFolder)
-                [scriptblock]$NestedScriptBlock = [scriptblock]::Create($NestedScriptBlock)               
-                
-                Start-PSScript -ScriptBlock $NestedScriptBlock -logFilePath $logFilePath -Credentials $Credentials 
+            Else {
+                $StartProcessArguments += @{ Wait = $True }
+                $Res = Start-Process @StartProcessArguments 
             }
         }
-    }
-    Else  {
-        if ($Credentials) {
-            Add-ToLog -Message "Start script [$ScriptPath] as [$($Credentials.UserName)]." -logFilePath $logFilePath -Display -Status "Info"  -level 1
-            if ($Wait){
-                $Res = Start-Process -FilePath $PowerShellPrgPath -Credential $Credentials -ArgumentList $AllArguments -PassThru
-                $Res.WaitForExit()
-            }
-            Else {
-                $Res = Start-Process -FilePath $PowerShellPrgPath -Credential $Credentials -ArgumentList $AllArguments -PassThru
-            }                             
-        }  
         Else {
-            if($Evaluate){                
-                Add-ToLog -Message "Start script [$ScriptPath] with evaluate." -logFilePath $logFilePath -Display -Status "Info"  -level 1
-                if ($Wait){
-                    $Res = Start-Process -FilePath $PowerShellPrgPath -Verb $Verb -ArgumentList $AllArguments -PassThru -Wait
-                }
-                Else {
-                    $Res = Start-Process -FilePath $PowerShellPrgPath -Verb $Verb -ArgumentList $AllArguments -PassThru
-                }
-            }
-            Else {
-                Add-ToLog -Message "Start script [$ScriptPath]." -logFilePath $logFilePath -Display -Status "Info"  -level 1
-                if ($Wait){ 
-                    $Res = Start-Process -FilePath $PowerShellPrgPath  -ArgumentList $AllArguments -PassThru -Wait
-                }
-                Else {
-                    $Res = Start-Process -FilePath $PowerShellPrgPath  -ArgumentList $AllArguments -PassThru
-                }
-            }
-        }   
+            #write-host "$($StartProcessArguments | out-string)"
+            $Res = Start-Process @StartProcessArguments
+        }           
     }
-
     Return $Res
 }
 Function Restart-SwitchInInterval {
@@ -1659,13 +1757,16 @@ function Import-ModuleRemotely {
         return; 
     }  
     
-    $ScriptBlock = {`
-        $ScriptBlock = {`
-        if (get-module $using:ModuleName)
-        {
-            remove-module $using:ModuleName;
-        }
-            New-Module -name $using:ModuleName -scriptblock { $($using:Module.Definition) } | import-module
+    $ScriptBlock = {
+        $ModuleName = $using:ModuleName 
+        $Definition = $using:Module.Definition        
+        $ScriptBlock = {
+            if (get-module $ModuleName)
+            {
+                remove-module $ModuleName
+            }
+            $SB = [ScriptBlock]::Create($Definition)
+            New-Module -name $ModuleName -scriptblock $SB | import-module
         }
         . ([ScriptBlock]::Create($ScriptBlock))
     }
@@ -2226,4 +2327,4 @@ Function Invoke-CommandWithDebug {
 
 }
 
-Export-ModuleMember -Function Get-NewAESKey, Import-SettingsFromFile, Get-VarFromAESFile, Set-VarToAESFile, Disconnect-VPN, Connect-VPN, Add-ToLog, Restart-Switches, Restart-SwitchInInterval, Get-EventList, Send-Email, Start-PSScript, Restart-LocalHostInInterval, Show-Notification, Get-Logger, Restart-ServiceInInterval, Set-TelegramMessage, Initialize-Logging, Get-SettingsFromFile, Get-HTMLTable, Get-HTMLCol, Get-ContentFromHTMLTemplate, Get-ErrorReporting, Get-CopyByBITS, Show-OpenDialog, Import-ModuleRemotely, Invoke-PSScriptBlock, Get-ACLArray, Set-PSModuleManifest, Get-VarToString, Get-UniqueArrayMembers, Resolve-IPtoFQDNinArray, Get-HelpersData, Get-DifferenceBetweenArrays, Test-Credentials, Convert-FSPath
+Export-ModuleMember -Function Get-NewAESKey, Import-SettingsFromFile, Get-VarFromAESFile, Set-VarToAESFile, Disconnect-VPN, Connect-VPN, Add-ToLog, Restart-Switches, Restart-SwitchInInterval, Get-EventList, Send-Email, Start-PSScript, Restart-LocalHostInInterval, Show-Notification, Get-Logger, Restart-ServiceInInterval, Set-TelegramMessage, Initialize-Logging, Get-SettingsFromFile, Get-HTMLTable, Get-HTMLCol, Get-ContentFromHTMLTemplate, Get-ErrorReporting, Get-CopyByBITS, Show-OpenDialog, Import-ModuleRemotely, Invoke-PSScriptBlock, Get-ACLArray, Set-PSModuleManifest, Get-VarToString, Get-UniqueArrayMembers, Resolve-IPtoFQDNinArray, Get-HelpersData, Get-DifferenceBetweenArrays, Test-Credentials, Convert-FSPath, Start-Program

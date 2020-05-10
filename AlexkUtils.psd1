@@ -12,7 +12,13 @@
 RootModule = 'AlexkUtils.psm1'
 
 # Version number of this module.
-ModuleVersion = '0.9'
+# Version A.B.C.D
+# A<1 Beta, X>1 release
+# B Major changes
+# C Add new functions
+# D Other changes
+
+ModuleVersion = '0.9.1.0'
 
 # Supported PSEditions
 # CompatiblePSEditions = @()
