@@ -18,7 +18,7 @@ RootModule = 'AlexkUtils.psm1'
 # C Add new functions
 # D Other changes
 
-ModuleVersion = '0.9.1.0'
+ModuleVersion = '0.9.2.0'
 
 # Supported PSEditions
 # CompatiblePSEditions = @()

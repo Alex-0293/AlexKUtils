@@ -213,14 +213,13 @@ Function Add-ToLog {
         [string] $Format,
         [Parameter(Mandatory = $false, Position =6, HelpMessage = "Level in string hierarchy." )]
         [int16] $Level
-
     )
 
-    if($ScriptLocalHost -ne $Env:COMPUTERNAME){
+    if($Global:ScriptLocalHost -ne "$($Env:COMPUTERNAME)"){
         $Remote  = $true
         $Message = "Remote [$($Env:COMPUTERNAME)]. $Message"
         $Hash = @{
-            Message     = $Message
+            Message     = $NewMessage
             logFilePath = $logFilePath
             Mode        = $Mode
             Display     = $false
@@ -228,14 +227,19 @@ Function Add-ToLog {
             Format      = $Format
             Level       = $Level
         }
-        $Global:LogBuffer +=$Hash
+        $Global:LogBuffer += $Hash
     }
 
     if($Format) {
         $Date = Get-Date -Format $Format
     }
     Else {
-        $Date = Get-Date
+        if ($Global:GlobalDateTimeFormat){
+            $Date = Get-Date -Format $Global:GlobalDateTimeFormat
+        }
+        Else {
+            $Date = Get-Date 
+        }
     }
     
     [string]$LevelText = ""
@@ -249,34 +253,64 @@ Function Add-ToLog {
     
     $Text = ($Date.ToString()  + " $LevelText" + $Message)
 
-    if ( -not $remote){
-        switch ($Mode.ToLower()) {
-            "append" { 
-                Out-File -FilePath $logFilePath -Encoding utf8 -Append -Force -InputObject $Text
-            }
-            "replace" {
-                Out-File -FilePath $logFilePath -Encoding utf8 -Force -InputObject $Text
-            }
-            Default { }    
+    if ( -not $remote){        
+        # Because many process can write simultaneously.
+        if ( -not $ScriptOperationTry) {
+            $ScriptOperationTry = 3
         }
+        for ($i = 1; $i -le $ScriptOperationTry; $i++) {
+            try {
+                switch ($Mode.ToLower()) {
+                "append" { 
+                    Out-File -FilePath $logFilePath -Encoding utf8 -Append -Force -InputObject $Text
+                }
+                "replace" {
+                    Out-File -FilePath $logFilePath -Encoding utf8 -Force -InputObject $Text
+                }
+                    Default { }    
+                }
+                break
+            }
+            Catch {
+                if ($PauseBetweenRetries){
+                    Start-Sleep -Milliseconds $PauseBetweenRetries 
+                }
+                Else {
+                    Start-Sleep -Milliseconds 500
+                }
+            }
+        }      
     }
     If ($Display){
-       if($status){ 
+        if ($logFilePath -ne $ScriptLogFilePath){
+            $TextLen = $text.Length
+            if ($TextLen -le $LogFileNamePosition){
+                $text = $text.PadRight($LogFileNamePosition, " ")
+                $NewText = "$text[$(split-path -path $logFilePath -Leaf)]"
+            } 
+            Else {
+                $NewText = "$text[$(split-path -path $logFilePath -Leaf)]"
+            } 
+        }
+        Else {
+            $NewText = $text
+        }
+        if($status){ 
             switch ($Status) {
                 "Info" { 
-                    Write-Host $Text  -ForegroundColor Green
+                    Write-Host $NewText  -ForegroundColor Green
                  }
                  "Warning" { 
-                    Write-Host $Text  -ForegroundColor Yellow
+                    Write-Host $NewText  -ForegroundColor Yellow
                  }
                  "Error" { 
-                    Write-Host $Text  -ForegroundColor Red
+                    Write-Host $NewText  -ForegroundColor Red
                  }
                 Default {}
             }
        }
        Else{
-            Write-Host $Text 
+            Write-Host $NewText 
        }
 
     }
@@ -439,39 +473,44 @@ Function Get-EventList {
         [int32] $Interval = 0
     )
     $Res = @()
-    $Log = Get-Content $LogFilePath -Encoding UTF8
-    if ($interval -ne 0) {
-        $FirstDate = (get-date).AddSeconds((-1 * $interval))
-    }
-    foreach ($Item in $log) {
-        if ($event -ne "") {
-            if ($item -like "*$event*") {
+    if (test-path $LogFilePath) {
+        $Log = Get-Content $LogFilePath -Encoding UTF8
+        if ($interval -ne 0) {
+            $FirstDate = (get-date).AddSeconds((-1 * $interval))
+        }
+        foreach ($Item in $log) {
+            if ($event -ne "") {
+                if ($item -like "*$event*") {
+                    if ($interval -eq 0) {
+                        $Res += $item 
+                    }
+                    Else {
+                        $ItemDate = get-date (($item -split " ")[0].Trim() + " " + ($item -split " ")[1].Trim())
+                        if ($ItemDate -ge $FirstDate) {
+                            $Res += $item
+                        }
+                    }
+                }
+            }
+            else {
                 if ($interval -eq 0) {
-                    $Res += $item 
+                    $Res += $item
                 }
                 Else {
-                    $ItemDate = get-date (($item -split " ")[0].Trim() + " " + ($item -split " ")[1].Trim())
-                    if ($ItemDate -ge $FirstDate) {
-                        $Res += $item
+                    try {
+                        $ItemDate = Get-Date (($item -split " ")[0].Trim() + " " + ($item -split " ")[1].Trim())
+                        if ($ItemDate -ge $FirstDate) {
+                            $Res += $item
+                        }
                     }
+                    Catch {}
                 }
+                
             }
         }
-        else {
-            if ($interval -eq 0) {
-                $Res += $item
-            }
-            Else {
-                try {
-                    $ItemDate = Get-Date (($item -split " ")[0].Trim() + " " + ($item -split " ")[1].Trim())
-                    if ($ItemDate -ge $FirstDate) {
-                        $Res += $item
-                    }
-                }
-                Catch {}
-            }
-            
-        }
+    }
+    Else {
+        Add-ToLog -Message "Log file [$LogFilePath] does not exist!" -logFilePath $ScriptLogFilePath -Status "Error" -Display -Level ($ParentLevel + 1)
     }
    
     return $Res
@@ -614,17 +653,15 @@ Function Start-PSScript {
         [Parameter(Mandatory = $true, Position = 4, HelpMessage = "Log file path." )]
         [ValidateNotNullOrEmpty()] 
         [string] $logFilePath,
-        [Parameter(Mandatory = $false, Position = 5, HelpMessage = "Output file path." )]
-        [string] $OutputFilePath,
-        [Parameter(Mandatory = $false, Position = 6, HelpMessage = "Working directory." )]
+        [Parameter(Mandatory = $false, Position = 5, HelpMessage = "Working directory." )]
         [string] $WorkDir,
-        [Parameter(Mandatory = $false, Position = 7, HelpMessage = "Use elevated rights." )]
+        [Parameter(Mandatory = $false, Position = 6, HelpMessage = "Use elevated rights." )]
         [switch]   $Evaluate,
-        [Parameter(Mandatory = $false, Position = 8, HelpMessage = "Debug run." )]
+        [Parameter(Mandatory = $false, Position = 7, HelpMessage = "Debug run." )]
         [switch]   $DebugRun,
-        [Parameter(Mandatory = $false, Position = 9, HelpMessage = "Wait for result." )]
+        [Parameter(Mandatory = $false, Position = 8, HelpMessage = "Wait for result." )]
         [switch]   $Wait,
-        [Parameter(Mandatory = $false, Position = 10, HelpMessage = "Program path to execute." )]
+        [Parameter(Mandatory = $false, Position = 9, HelpMessage = "Program path to execute." )]
         [string]   $Program = "C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe"               
     )    
 <#
@@ -650,11 +687,7 @@ Function Start-PSScript {
     }
     if ($ScriptBlock){
         $Message               = "Starting powershell scriptblock" 
-    }
-    $StartProcessArguments = @{
-        FilePath = $Program
-        PassThru = $True
-    }
+    } 
     if ($DebugRun){
         $PowershellArguments += " -NoExit"        
     }
@@ -671,7 +704,7 @@ Function Start-PSScript {
         $PowershellArguments += " $Arguments"
     }
       
-    if ($Evaluate -and (($Credentials) -or ($OutputFilePath) )) {
+    if ($Evaluate -and (($Credentials))) {
         # if($Credentials){
         #     if ($DebugRun){
         #         [string]$NestedScriptBlock = {
@@ -724,7 +757,6 @@ Function Start-PSScript {
             Arguments      = $PowershellArguments
             Credentials    = $Credentials
             LogFilePath    = $logFilePath
-            OutputFilePath = $OutputFilePath
             WorkDir        = $WorkDir            
         }
         If ($Wait){
@@ -765,74 +797,76 @@ Function Start-Program {
         [Parameter(Mandatory = $true, Position = 3, HelpMessage = "Log file path." )]
         [ValidateNotNullOrEmpty()] 
         [string]    $LogFilePath,
-        [Parameter(Mandatory = $false, Position = 4, HelpMessage = "Output file path." )]
-        [string]    $OutputFilePath,
-        [Parameter(Mandatory = $false, Position = 5, HelpMessage = "Working directory." )]
+        [Parameter(Mandatory = $false, Position = 4, HelpMessage = "Working directory." )]
         [string]    $WorkDir,
-        [Parameter(Mandatory = $false, Position = 6, HelpMessage = "Use elevated rights." )]
+        [Parameter(Mandatory = $false, Position = 5, HelpMessage = "Use elevated rights." )]
         [switch]    $Evaluate,
-        [Parameter(Mandatory = $false, Position = 7, HelpMessage = "Debug run." )]
+        [Parameter(Mandatory = $false, Position = 6, HelpMessage = "Debug run." )]
         [switch]    $DebugRun,
-        [Parameter(Mandatory = $false, Position = 8, HelpMessage = "Wait for result." )]
+        [Parameter(Mandatory = $false, Position = 7, HelpMessage = "Wait for result." )]
         [switch]    $Wait                     
     )    
+
+    $ProcessInfo                        = New-Object -TypeName System.Diagnostics.ProcessStartInfo
+    $ProcessInfo.FileName               = $Program
+    $ProcessInfo.UseShellExecute        = $false
+    $ProcessInfo.RedirectStandardError  = $true
+    #$ProcessInfo.RedirectStandardOutput = $true
+    $ProcessInfo.CreateNoWindow         = $true
+
+    $Message               = "User [$($RunningCredentials.Name)]. Start program [$Program]" 
  
-    $Message               = "Start program [$Program]" 
-    $StartProcessArguments = @{
-        FilePath = $Program
-        PassThru = $True
-    }
-    if($Credentials){
-        if(!(Test-Credentials $Credentials)){
-            Write-Host "Supplied credentials [$($credentials.username)] error!" -ForegroundColor red            
+    if($Credentials){        
+        if ($RunningCredentials.name -ne $Credentials.UserName) {
+            if(!(Test-Credentials $Credentials)){
+                Write-Host "Supplied credentials [$($credentials.username)] error!" -ForegroundColor red            
+            }
+
+            $Message               += " as [$($Credentials.UserName)]" 
+
+            [array]    $UserArray = $Credentials.UserName.Split("\") 
+            $ProcessInfo.UserName = $UserArray[1]
+            $ProcessInfo.Domain   = $UserArray[0]
+            $ProcessInfo.Password = $Credentials.Password
         }
-        $Message               += " as [$($Credentials.UserName)]" 
-        $StartProcessArguments += @{ Credential = $Credentials }
-    }
-    if ($OutputFilePath) {
-        $Message               += ", redirect output to [$OutputFilePath]"
-        $StartProcessArguments += @{ RedirectStandardOutput = "$OutputFilePath" }
+        Else {
+            $Message               += " as [Current user]" 
+        }
     }
     if ($DebugRun){
-       $Message                += ", with debug" 
-    }
-    Else {
-       $StartProcessArguments  += @{ WindowStyle = "Hidden" }
-    }    
+       $Message                += ", with debug"        
+    }  
     if ($Evaluate) {
         $Message               += ", with evaluate" 
-        $StartProcessArguments += @{ Verb = "RunAs" }
+        $ProcessInfo.Verb = "RunAs"
     }     
     if ($WorkDir) {
         $Message               += ", use work directory [$WorkDir]" 
-        $StartProcessArguments += @{ WorkingDirectory = "$WorkDir" }
+        $ProcessInfo.WorkingDirectory = "$WorkDir"
     }
     if ($Arguments){
         $Message               += ", use arguments [$Arguments]" 
-        $StartProcessArguments += @{ ArgumentList = "$Arguments" }
+        $ProcessInfo.Arguments = "$Arguments"
     }
-       
+
     if ($Evaluate -and (($Credentials) -or ($OutputFilePath) )) {
         Write-host "In the future. Code in progress."             
     }
     Else  { 
         Add-ToLog -Message "$Message." -logFilePath $logFilePath -Display -Status "Info"  -level 1
-        if ($Wait){            
-            if ($Credentials) {
-                $Res = Start-Process @StartProcessArguments
-                $Res.WaitForExit() 
-            }
-            Else {
-                $StartProcessArguments += @{ Wait = $True }
-                $Res = Start-Process @StartProcessArguments 
-            }
+        if ($Wait){
+            $Process           = New-Object System.Diagnostics.Process
+            $Process.StartInfo = $ProcessInfo
+            $Process.Start() | Out-Null 
+            $Process.WaitForExit()
         }
         Else {
-            #write-host "$($StartProcessArguments | out-string)"
-            $Res = Start-Process @StartProcessArguments
+            $Process           = New-Object System.Diagnostics.Process
+            $Process.StartInfo = $ProcessInfo
+            $Process.Start() | Out-Null 
         }           
     }
-    Return $Res
+    Return $Process
 }
 Function Restart-SwitchInInterval {
 #RebootSwitchesInInterval
@@ -1021,24 +1055,35 @@ function Get-Logger {
         [ValidateNotNullOrEmpty()] 
         [string] $LogPath,
         [Parameter(Mandatory = $false, Position = 1, HelpMessage = "Time format." )]
-        [string] $TimeFormat = 'yyyy-MM-dd HH:mm:ss'
+        [string] $TimeFormat
     )
+    if ($Global:GlobalDateTimeFormat){
+        $TimeFormat = $Global:GlobalDateTimeFormat
+    }
+    Else {
+        $TimeFormat = "dd.MM.yyyy HH:mm:ss"
+    }
 
-    $LogsDir = [System.IO.Path]::GetDirectoryName( $LogPath )
-    New-Item $LogsDir -ItemType Directory -Force | Out-Null
-    #New-Item $LogPath -ItemType File -Force | Out-Null
+    $NewDate = Get-Date -Format $TimeFormat
+
+    $LogsDir = Split-Path -path $LogPath -Parent
+    if (-not (Test-path $LogsDir)){
+        New-Item $LogsDir -ItemType Directory -Force | Out-Null
+    }
+
 
     $Logger = [PSCustomObject]@{
-        LogPath    = $LogPath
-        TimeFormat = $TimeFormat
+        LogPath = $LogPath
+        NewDate = [string]$NewDate
+
     }
 
     Add-Member -InputObject $Logger -MemberType ScriptMethod AddErrorRecord -Value {
         param(
             [Parameter( Mandatory = $true )]
-            [string]$String      
+            [string] $String      
         )
-        "$( Get-Date -Format 'yyyy-MM-dd HH:mm:ss' ) [Error] $String" | Out-File $this.LogPath -Append -Encoding utf8
+        "$($this.NewDate) [Error] $String" | Out-File -FilePath $this.LogPath -Append -Encoding utf8
     }    
     return $Logger
 }
@@ -1173,10 +1218,10 @@ function Initialize-Logging {
     $Global:Logger = Get-Logger $ErrorLogFilePath
     Write-Debug $Global:Logger
     
-    $ScriptFolder = Split-Path $LogFolder -parent
-    if (Test-Path "$ScriptFolder\debug.txt") {
-        $TranscriptPath = "$LogFolder\Transcript.log"
-        Start-Transcript -Path $TranscriptPath -Force -append
+    if (Test-Path "$ProjectRoot\debug.txt") {
+        $TranscriptPath = "$ProjectRoot\$LOGSFolder\Transcript.log"
+        Start-Transcript -Path $TranscriptPath -Force -append | out-Null
+        Write-Host "Transcript started." -ForegroundColor Gray
     }
     else {
             $Global:ErrorActionPreference = 'Stop'
@@ -1385,6 +1430,11 @@ function Get-ErrorReporting {
         $Trap
     )
     [string]$PreviousCommand = $Trap.InvocationInfo.line
+    try{
+        [string]$PreviousCommandReplacedArgs = (Invoke-Expression -command "return `"$PreviousCommand`"").trim()
+        [string]$PreviousCommandReplacedArgs = $PreviousCommandReplacedArgs.Insert(($Trap.InvocationInfo.OffsetInLine-1), '!')
+    }
+    Catch {}    
     [string]$Trap1 = $Trap
     [string]$Trap1 = ($Trap1.replace("[", "")).replace("]", "")
     [string]$line = $Trap.InvocationInfo.ScriptLineNumber
@@ -1406,10 +1456,10 @@ function Get-ErrorReporting {
         [string]$Module = (($Trap.ScriptStackTrace).split(",")[1]).split("`n")[0].replace(" line ", "").Trim()
         [string]$Function = (($Trap.ScriptStackTrace).split(",")[0]).replace("at ", "")
         [string]$ToScreen = "$Trap `n    Script:   `"$($Script):$($line)`"`n    Module:   `"$Module`"`n    Function: `"$Function`""
-        [string]$Message = "$Trap1 [script] $Trace1"         
+        [string]$Message = "$Trap1 [script] `'$PreviousCommandReplacedArgs`' $Trace1"         
     }
     else { 
-        [string]$Message = "$Trap1 [script] $Trace1"        
+        [string]$Message = "$Trap1 [script] `'$PreviousCommandReplacedArgs`' $Trace1"        
         $ToScreen = "$Trap `n   $($Script):$($line)"
     }
  
@@ -1423,7 +1473,8 @@ function Get-ErrorReporting {
     Write-Host "Stack trace:" -ForegroundColor green     
     Write-Host "    $Trace" -ForegroundColor green
     Write-Host "Previous command:" -ForegroundColor Yellow
-    Write-Host "    $PreviousCommand" -ForegroundColor Yellow
+    Write-Host "    $PreviousCommand" -ForegroundColor Yellow -NoNewline
+    Write-Host "    $PreviousCommandReplacedArgs" -ForegroundColor Yellow
     Write-Host "====================================================================================================================================================" -ForegroundColor Red
 }
 function Get-HTMLRowFullness {
@@ -1758,15 +1809,22 @@ function Import-ModuleRemotely {
     }  
     
     $ScriptBlock = {
-        $ModuleName = $using:ModuleName 
-        $Definition = $using:Module.Definition        
-        $ScriptBlock = {
+        [string]$ModuleName        = $using:ModuleName
+        [string]$Definition        = $using:Module.Definition
+        ##### Init remote variables
+        [string]   $ScriptLocalHost            = $using:ScriptLocalHost
+        [hashtable]$Global:LogBuffer           = @{}
+        [string]   $Global:ScriptLogFilePath   = $using:ScriptLogFilePath
+        [string]   $Global:ParentLevel         = $using:ParentLevel
+        [string]   $Global:LogFileNamePosition = $using:LogFileNamePosition
+
+        $ScriptBlock     = {
             if (get-module $ModuleName)
             {
-                remove-module $ModuleName
+                remove-module $ModuleName -Force
             }
             $SB = [ScriptBlock]::Create($Definition)
-            New-Module -name $ModuleName -scriptblock $SB | import-module
+            New-Module -name $ModuleName -scriptblock $SB | import-module -force
         }
         . ([ScriptBlock]::Create($ScriptBlock))
     }
@@ -1851,8 +1909,8 @@ function Invoke-PSScriptBlock {
     }
     Else {
         $LocalScriptBlock = [scriptblock]::Create($ScriptBlock.ToString().Replace("Using:", ""))        
-        $Res = Invoke-Command -ScriptBlock $LocalScriptBlock
-        Remove-PSSession $Session
+        $Res = Invoke-Command -ScriptBlock $LocalScriptBlock 
+        #Remove-PSSession $Session
     }
 
     return $Res
@@ -2298,33 +2356,52 @@ Function Invoke-CommandWithDebug {
     [CmdletBinding()]
     param
     (
-        [Parameter( Mandatory = $true, Position = 0, HelpMessage = "Full path to EventLogAnalyzer script." )]
-        [ValidateNotNullOrEmpty()]
-        [string] $EventLogScriptPath,
-        [Parameter( Mandatory = $true, Position = 1, HelpMessage = "PS script path.", ParameterSetName = "Script" )]
+        [Parameter( Mandatory = $true,  Position = 0, HelpMessage = "PS script path.", ParameterSetName = "Script" )]
         [ValidateNotNullOrEmpty()]        
         [string] $ScriptPath,
-        [Parameter( Mandatory = $true, Position = 2, HelpMessage = "Scriptblock.", ParameterSetName = "ScriptBlock"  )]
+        [Parameter( Mandatory = $true,  Position = 1, HelpMessage = "Scriptblock.", ParameterSetName = "ScriptBlock"  )]
         [ValidateNotNullOrEmpty()]
         [scriptblock] $ScriptBlock,
-        [Parameter( Mandatory = $false, Position = 3, HelpMessage = "Arguments." )]
+        [Parameter( Mandatory = $false, Position = 2, HelpMessage = "Arguments." )]
         [string] $Arguments
     )
-    
+    $EventArray = @()
+
     $StartTime = Get-Date
-    $Res       = Start-PSScript -ScriptPath $ScriptPath -Arguments $Arguments -logFilePath $ScriptLogFilePath -DebugRun
+    if ($ScriptPath){
+        $Res = Start-PSScript -ScriptPath $ScriptPath -Arguments $Arguments -logFilePath $ScriptLogFilePath  -Wait
+    }
+    ElseIf ($ScriptBlock) {
+        $Res = Start-PSScript -ScriptBlock $ScriptBlock -Arguments $Arguments -logFilePath $ScriptLogFilePath  -wait
+    }
     $EndTime   = Get-Date
 
-    $Culture = Get-Culture 
+    if (Test-ElevatedRights) {
+        $Logs = Get-WinEvent -ListLog *
+        
+        Foreach ($Log in $Logs) {           
+            #$Log.LogName
+            $Filter = @{
+                LogName   = $Log.LogName
+                StartTime = $StartTime
+                EndTime   = $EndTime
+            }
+            $EventArray += Get-WinEvent -FilterHashTable $Filter -ErrorAction SilentlyContinue
+        }  
+    }
+    Else {
+        Add-ToLog -Message "Need admin rights! Invoke-CommandWithDebug Aborted." -logFilePath $ScriptLogFilePath -Display -Status "Error" -Level ($ParentLevel + 1)
+    }
 
-    [string]$Start = Get-Date $StartTime -format ($Culture.DateTimeFormat.SortableDateTimePattern )
-    [string]$End   = get-date $EndTime   -format ($Culture.DateTimeFormat.SortableDateTimePattern )
-    $ExportPath    = ""
-
-    [string]$EventLogScriptPathArguments  = " -Start `"$Start`" -End `"$End`" -ExportPAth `"$ExportPath`""
-
-    Start-PSScript -ScriptPath $EventLogScriptPath -Arguments $EventLogScriptPathArguments -logFilePath $ScriptLogFilePath
-
+    Return $EventArray
 }
 
-Export-ModuleMember -Function Get-NewAESKey, Import-SettingsFromFile, Get-VarFromAESFile, Set-VarToAESFile, Disconnect-VPN, Connect-VPN, Add-ToLog, Restart-Switches, Restart-SwitchInInterval, Get-EventList, Send-Email, Start-PSScript, Restart-LocalHostInInterval, Show-Notification, Get-Logger, Restart-ServiceInInterval, Set-TelegramMessage, Initialize-Logging, Get-SettingsFromFile, Get-HTMLTable, Get-HTMLCol, Get-ContentFromHTMLTemplate, Get-ErrorReporting, Get-CopyByBITS, Show-OpenDialog, Import-ModuleRemotely, Invoke-PSScriptBlock, Get-ACLArray, Set-PSModuleManifest, Get-VarToString, Get-UniqueArrayMembers, Resolve-IPtoFQDNinArray, Get-HelpersData, Get-DifferenceBetweenArrays, Test-Credentials, Convert-FSPath, Start-Program
+function Test-ElevatedRights {
+    $identity  = [Security.Principal.WindowsIdentity]::GetCurrent()
+    $principal = New-Object Security.Principal.WindowsPrincipal -ArgumentList $identity
+    $Res       = $principal.IsInRole( [Security.Principal.WindowsBuiltInRole]::Administrator )
+    
+    return $Res
+}
+
+Export-ModuleMember -Function Get-NewAESKey, Import-SettingsFromFile, Get-VarFromAESFile, Set-VarToAESFile, Disconnect-VPN, Connect-VPN, Add-ToLog, Restart-Switches, Restart-SwitchInInterval, Get-EventList, Send-Email, Start-PSScript, Restart-LocalHostInInterval, Show-Notification, Get-Logger, Restart-ServiceInInterval, Set-TelegramMessage, Initialize-Logging, Get-SettingsFromFile, Get-HTMLTable, Get-HTMLCol, Get-ContentFromHTMLTemplate, Get-ErrorReporting, Get-CopyByBITS, Show-OpenDialog, Import-ModuleRemotely, Invoke-PSScriptBlock, Get-ACLArray, Set-PSModuleManifest, Get-VarToString, Get-UniqueArrayMembers, Resolve-IPtoFQDNinArray, Get-HelpersData, Get-DifferenceBetweenArrays, Test-Credentials, Convert-FSPath, Start-Program, Test-ElevatedRights, Invoke-CommandWithDebug
