@@ -214,12 +214,17 @@ Function Add-ToLog {
         [Parameter(Mandatory = $false, Position =6, HelpMessage = "Level in string hierarchy." )]
         [int16] $Level
     )
-
+    if (-not $Level) {
+        if($ParentLevel){
+            [int16] $Level = [int16] $ParentLevel + 1
+        }
+    }
+    
     if($Global:ScriptLocalHost -ne "$($Env:COMPUTERNAME)"){
         $Remote  = $true
         $Message = "Remote [$($Env:COMPUTERNAME)]. $Message"
         $Hash = @{
-            Message     = $NewMessage
+            Message     = $Message
             logFilePath = $logFilePath
             Mode        = $Mode
             Display     = $false
@@ -245,14 +250,17 @@ Function Add-ToLog {
     [string]$LevelText = ""
     if ($Level){
         [string]$LevelSign       = " "
-        $LevelMultiplier = 4
-        for ($i = 0; $i -lt ($Level * $LevelMultiplier); $i++) {
+        [int16] $LevelMultiplier = 4
+        for ($i = 0; $i -lt ($Level*$LevelMultiplier); $i++) {
             $LevelText += $LevelSign
         }        
     }
     
     $Text = ($Date.ToString()  + " $LevelText" + $Message)
-
+    # Write-host "Text = $Text"                 
+    # Write-Host "Add-ToLog ParentLevel = $ParentLevel"
+    # Write-Host "Add-ToLog Level = $Level"
+    # Write-Host "Padding = $($LevelMultiplier)"
     if ( -not $remote){        
         # Because many process can write simultaneously.
         if ( -not $ScriptOperationTry) {
@@ -750,7 +758,7 @@ Function Start-PSScript {
         # }
     }
     Else  { 
-        Add-ToLog -Message "$Message." -logFilePath $logFilePath -Display -Status "Info"  -level 1
+        Add-ToLog -Message "$Message." -logFilePath $logFilePath -Display -Status "Info"
         
         $Params = @{
             Program        = $Program
@@ -853,7 +861,7 @@ Function Start-Program {
         Write-host "In the future. Code in progress."             
     }
     Else  { 
-        Add-ToLog -Message "$Message." -logFilePath $logFilePath -Display -Status "Info"  -level 1
+        Add-ToLog -Message "$Message." -logFilePath $logFilePath -Display -Status "Info"
         if ($Wait){
             $Process           = New-Object System.Diagnostics.Process
             $Process.StartInfo = $ProcessInfo
@@ -1038,55 +1046,6 @@ Function Show-Notification {
     Get-Event event_BalloonTip* | Remove-Event
 
 }
-function Get-Logger {
-<#
-    .SYNOPSIS 
-        .AUTHOR Alexk
-        .DATE 
-        .VER 1   
-    .DESCRIPTION
-     Function to create logger object.
-    .EXAMPLE
-    Get-Logger -LogPath "c:\1.log"
-#>    
-    [CmdletBinding()]   
-    param (
-        [Parameter(Mandatory = $true, Position = 0, HelpMessage = "Log file path." )]
-        [ValidateNotNullOrEmpty()] 
-        [string] $LogPath,
-        [Parameter(Mandatory = $false, Position = 1, HelpMessage = "Time format." )]
-        [string] $TimeFormat
-    )
-    if ($Global:GlobalDateTimeFormat){
-        $TimeFormat = $Global:GlobalDateTimeFormat
-    }
-    Else {
-        $TimeFormat = "dd.MM.yyyy HH:mm:ss"
-    }
-
-    $NewDate = Get-Date -Format $TimeFormat
-
-    $LogsDir = Split-Path -path $LogPath -Parent
-    if (-not (Test-path $LogsDir)){
-        New-Item $LogsDir -ItemType Directory -Force | Out-Null
-    }
-
-
-    $Logger = [PSCustomObject]@{
-        LogPath = $LogPath
-        NewDate = [string]$NewDate
-
-    }
-
-    Add-Member -InputObject $Logger -MemberType ScriptMethod AddErrorRecord -Value {
-        param(
-            [Parameter( Mandatory = $true )]
-            [string] $String      
-        )
-        "$($this.NewDate) [Error] $String" | Out-File -FilePath $this.LogPath -Append -Encoding utf8
-    }    
-    return $Logger
-}
 Function Restart-ServiceInInterval {
     #RestartServiceInInterval
     <#
@@ -1187,45 +1146,6 @@ Function Set-TelegramMessage {
     }
 
     return $Response
-}
-function Initialize-Logging {
- #InitLogging
-    <#
-    .SYNOPSIS 
-        .AUTHOR Alexk
-        .DATE 
-        .VER 1   
-    .DESCRIPTION
-     Function to set initial logging parameters.
-    .EXAMPLE
-    Initialize-Logging -MyScriptRoot "c:\script"
-#>    
-    [CmdletBinding()]   
-    Param(
-        [Parameter( Mandatory = $true, Position = 0, HelpMessage = "Error log file path." )]
-        [ValidateNotNullOrEmpty()]
-        [string]$ErrorLogFilePath,
-        [Parameter( Mandatory = $false, Position = 1, HelpMessage = "Powershell strict version." )]
-        [string]$StrictVer = "Latest"
-    )
-    Set-StrictMode -Version $StrictVer
-    
-    $LogFolder = split-path $ErrorLogFilePath
-    If(!(Test-path $LogFolder)){
-        New-Item -path $LogFolder -ItemType Directory
-    }
-    
-    $Global:Logger = Get-Logger $ErrorLogFilePath
-    Write-Debug $Global:Logger
-    
-    if (Test-Path "$ProjectRoot\debug.txt") {
-        $TranscriptPath = "$ProjectRoot\$LOGSFolder\Transcript.log"
-        Start-Transcript -Path $TranscriptPath -Force -append | out-Null
-        Write-Host "Transcript started." -ForegroundColor Gray
-    }
-    else {
-            $Global:ErrorActionPreference = 'Stop'
-    }
 }
 function Get-SettingsFromFile {
 #Get-Vars
@@ -1465,7 +1385,7 @@ function Get-ErrorReporting {
  
     $Message = $Message.Replace("`n", "|") 
     $Message = $Message.Replace("`r", "")
-    $Global:Logger.AddErrorRecord( $Message )
+    Add-ToLog -Message "[Error] $Message" -logFilePath "$(Split-Path -path $Global:MyScriptRoot -parent)\LOGS\Errors.log" -Status "Error" -Format "dd.MM.yyyy HH:mm:ss"
 
     Write-Host "$(Get-date) SCRIPT EXIT DUE TO ERROR!!!" -ForegroundColor Red
     Write-Host "====================================================================================================================================================" -ForegroundColor Red
@@ -1813,11 +1733,12 @@ function Import-ModuleRemotely {
         [string]$Definition        = $using:Module.Definition
         ##### Init remote variables
         [string]   $ScriptLocalHost            = $using:ScriptLocalHost
-        [hashtable]$Global:LogBuffer           = @{}
+        [array]    $Global:LogBuffer           = @()
         [string]   $Global:ScriptLogFilePath   = $using:ScriptLogFilePath
         [string]   $Global:ParentLevel         = $using:ParentLevel
         [string]   $Global:LogFileNamePosition = $using:LogFileNamePosition
-
+        $Global:RunningCredentials             = [System.Security.Principal.WindowsIdentity]::GetCurrent()
+        
         $ScriptBlock     = {
             if (get-module $ModuleName)
             {
@@ -2404,4 +2325,4 @@ function Test-ElevatedRights {
     return $Res
 }
 
-Export-ModuleMember -Function Get-NewAESKey, Import-SettingsFromFile, Get-VarFromAESFile, Set-VarToAESFile, Disconnect-VPN, Connect-VPN, Add-ToLog, Restart-Switches, Restart-SwitchInInterval, Get-EventList, Send-Email, Start-PSScript, Restart-LocalHostInInterval, Show-Notification, Get-Logger, Restart-ServiceInInterval, Set-TelegramMessage, Initialize-Logging, Get-SettingsFromFile, Get-HTMLTable, Get-HTMLCol, Get-ContentFromHTMLTemplate, Get-ErrorReporting, Get-CopyByBITS, Show-OpenDialog, Import-ModuleRemotely, Invoke-PSScriptBlock, Get-ACLArray, Set-PSModuleManifest, Get-VarToString, Get-UniqueArrayMembers, Resolve-IPtoFQDNinArray, Get-HelpersData, Get-DifferenceBetweenArrays, Test-Credentials, Convert-FSPath, Start-Program, Test-ElevatedRights, Invoke-CommandWithDebug
+Export-ModuleMember -Function Get-NewAESKey, Import-SettingsFromFile, Get-VarFromAESFile, Set-VarToAESFile, Disconnect-VPN, Connect-VPN, Add-ToLog, Restart-Switches, Restart-SwitchInInterval, Get-EventList, Send-Email, Start-PSScript, Restart-LocalHostInInterval, Show-Notification, Restart-ServiceInInterval, Set-TelegramMessage, Get-SettingsFromFile, Get-HTMLTable, Get-HTMLCol, Get-ContentFromHTMLTemplate, Get-ErrorReporting, Get-CopyByBITS, Show-OpenDialog, Import-ModuleRemotely, Invoke-PSScriptBlock, Get-ACLArray, Set-PSModuleManifest, Get-VarToString, Get-UniqueArrayMembers, Resolve-IPtoFQDNinArray, Get-HelpersData, Get-DifferenceBetweenArrays, Test-Credentials, Convert-FSPath, Start-Program, Test-ElevatedRights, Invoke-CommandWithDebug
