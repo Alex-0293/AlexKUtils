@@ -1385,7 +1385,10 @@ function Get-ErrorReporting {
  
     $Message = $Message.Replace("`n", "|") 
     $Message = $Message.Replace("`r", "")
-    Add-ToLog -Message "[Error] $Message" -logFilePath "$(Split-Path -path $Global:MyScriptRoot -parent)\LOGS\Errors.log" -Status "Error" -Format "dd.MM.yyyy HH:mm:ss"
+    try {
+        Add-ToLog -Message "[Error] $Message" -logFilePath "$(Split-Path -path $Global:MyScriptRoot -parent)\LOGS\Errors.log" -Status "Error" -Format "dd.MM.yyyy HH:mm:ss" -ErrorAction SilentlyContinue
+    }
+    Catch {Write-host "Cant save error info!" -ForegroundColor Red}
 
     Write-Host "$(Get-date) SCRIPT EXIT DUE TO ERROR!!!" -ForegroundColor Red
     Write-Host "====================================================================================================================================================" -ForegroundColor Red
