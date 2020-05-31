@@ -1782,7 +1782,9 @@ function Invoke-PSScriptBlock {
         [Parameter( Mandatory = $False, Position = 3, ParameterSetName = "Remote", HelpMessage = "Remote credentials." )]
         [string]  $ImportLocalModule,  
         [Parameter( Mandatory = $False, Position = 4, ParameterSetName = "Remote", HelpMessage = "Test-connection before session." )]
-        [Switch]  $TestComputer  
+        [Switch]  $TestComputer,
+        [Parameter( Mandatory = $False, Position = 5, ParameterSetName = "Remote", HelpMessage = "Array of exported parameters." )]
+        $ExportedParameters
     )
     
     $Res = $null
@@ -1828,8 +1830,26 @@ function Invoke-PSScriptBlock {
     }
 
     if ($Session) {
-        $Res = Invoke-Command -Session $Session -ScriptBlock $ScriptBlock
-        Remove-PSSession $Session
+        if ($ExportedParameters){
+            Set-Variable -Name "GlobalExportedParameters" -Value $ExportedParameters -Scope "Global" -Visibility Private
+            $GlobalExportedParameters.Remove("Computer")    | Out-Null
+            $GlobalExportedParameters.Remove("Credentials") | Out-Null  
+
+            $NewStrings = '
+                $Params = $Using:GlobalExportedParameters
+            '
+            $ScriptBlockWithExportedParams = $ScriptBlock.ToString()
+            $ScriptBlockWithExportedParams = $ScriptBlockWithExportedParams.Replace("Using:", "Params.")
+            $ScriptBlockWithExportedParams = $NewStrings + $ScriptBlockWithExportedParams
+            $ScriptBlockWithExportedParams = [scriptblock]::Create($ScriptBlockWithExportedParams)
+
+            $Res = Invoke-Command -Session $Session -ScriptBlock $ScriptBlockWithExportedParams
+            Remove-Variable -Name "GlobalExportedParameters"  -Scope "Global" -Force | Out-Null
+        }
+        Else {
+            $Res = Invoke-Command -Session $Session -ScriptBlock $ScriptBlock
+            Remove-PSSession $Session
+        }
     }
     Else {
         $LocalScriptBlock = [scriptblock]::Create($ScriptBlock.ToString().Replace("Using:", ""))        
