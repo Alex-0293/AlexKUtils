@@ -1831,7 +1831,7 @@ function Invoke-PSScriptBlock {
 
     if ($Session) {
         if ($ExportedParameters){
-            Set-Variable -Name "GlobalExportedParameters" -Value $ExportedParameters -Scope "Global" -Visibility Private
+            Set-Variable -Name "GlobalExportedParameters" -Value $ExportedParameters -Scope "Global" #-Visibility Private
             $GlobalExportedParameters.Remove("Computer")    | Out-Null
             $GlobalExportedParameters.Remove("Credentials") | Out-Null  
 
