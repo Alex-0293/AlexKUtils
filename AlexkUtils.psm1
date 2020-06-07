@@ -1840,6 +1840,8 @@ function Invoke-PSScriptBlock {
             '
             $ScriptBlockWithExportedParams = $ScriptBlock.ToString()
             $ScriptBlockWithExportedParams = $ScriptBlockWithExportedParams.Replace("Using:", "Params.")
+            $ScriptBlockWithExportedParams = $ScriptBlockWithExportedParams.Replace("using:", "Params.")
+            $ScriptBlockWithExportedParams = $ScriptBlockWithExportedParams.Replace("USING:", "Params.")
             $ScriptBlockWithExportedParams = $NewStrings + $ScriptBlockWithExportedParams
             $ScriptBlockWithExportedParams = [scriptblock]::Create($ScriptBlockWithExportedParams)
 
