@@ -102,7 +102,7 @@ Function Get-VarFromAESFile  {
     )
     
     if (!(test-path $AESKeyFilePath)) {
-        write-host "AESKeyFilePath not exist" -ForegroundColor Red
+        write-host "AESKeyFilePath [$AESKeyFilePath] not exist" -ForegroundColor Red
         $AESKeyFilePathExist = $false 
     }
     else { $AESKeyFilePathExist = $true }
@@ -232,7 +232,7 @@ Function Add-ToLog {
             Format      = $Format
             Level       = $Level
         }
-        $Global:LogBuffer += $Hash
+        [array] $Global:LogBuffer += $Hash
     }
 
     if($Format) {
@@ -264,7 +264,7 @@ Function Add-ToLog {
     if ( -not $remote){        
         # Because many process can write simultaneously.
         if ( -not $ScriptOperationTry) {
-            $ScriptOperationTry = 3
+            $ScriptOperationTry = 10
         }
         for ($i = 1; $i -le $ScriptOperationTry; $i++) {
             try {
@@ -386,16 +386,27 @@ Function Connect-VPN {
     )
 
     [string] $LoginText = Get-VarToString $Login
+    [string] $PassText  = Get-VarToString $Password
     Add-ToLog "Try to connect VPN - $VPNConnectionName under $LoginText" $logFilePath
-    $Res = (& rasdial $VPNConnectionName  $LoginText ( Get-VarToString $Password)) -join " "
+    
+    $StartConnection = Get-Date
+    $Res = (& rasdial.exe $VPNConnectionName $LoginText $PassText ) -join " "
     if (($Res -like "*success*") -or ($Res -like "*успешно*")) {
-        Add-ToLog $Res $logFilePath
-        return $true         
+        $TimeRun = ((Get-Date) - $StartConnection).TotalMilliseconds
+        if ($TimeRun -le 100) {
+            Add-ToLog $Res $logFilePath
+            return "Hang"
+        }
+        Else {
+            Add-ToLog $Res $logFilePath
+            return "Success"             
+        }
+               
     }
     else {
         Add-ToLog $Res $logFilePath
         #Add-ToLog $false $logFilePath
-        return $false
+        return "Fail"
     }
 }
 Function Restart-Switches {
@@ -556,15 +567,15 @@ Function Send-Email {
         [Parameter(Mandatory = $false, Position = 7, HelpMessage = "User password.", ParameterSetName = "Auth" )]
         [securestring] $Password,        
         [Parameter(Mandatory = $false, Position = 8, HelpMessage = "SMTP port." )]
-        [int16]  $Port                = 25,
+        [Int32]  $Port                = 25,
         [Parameter(Mandatory = $false, Position = 9, HelpMessage = "Use SSL." )]
         [switch]   $SSL,
         [Parameter(Mandatory = $false, Position = 10, HelpMessage = "Email attachment." )]
         [string] $Attachment,
         [Parameter(Mandatory = $false, Position = 11, HelpMessage = "Email attachment content id." )]
         [string] $AttachmentContentId,
-        [Parameter(Mandatory = $false, Position = 12, HelpMessage = "Retry counter." )]
-        [int16]  $Counter             = 100,
+        [Parameter(Mandatory = $false, Position = 12, HelpMessage = "Retry time if error." )]
+        [TimeSpan]  $TTL     = (New-TimeSpan -days 1),
         [Parameter(Mandatory = $false, Position = 13, HelpMessage = "Pause between retries in seconds." )]
         [int16]  $PauseBetweenTries   = 30
     )
@@ -590,51 +601,81 @@ Function Send-Email {
         try {
             if ([Net.ServicePointManager]::SecurityProtocol -notcontains 'Tls12') {
                 [Net.ServicePointManager]::SecurityProtocol +=  [Net.SecurityProtocolType]::Tls12
-            }
+            }   
+            [System.Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
         }
         Catch {}
-        [System.Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
-        #[System.Net.ServicePointManager]::CertificatePolicy = 
         $smtp.EnableSSL = $SSL
     }
     if ($user) {
-        $smtp.Credentials = New-Object System.Net.NetworkCredential((Get-VarToString $user), (Get-VarToString $Password))
+        $Credentials  = New-Object System.Net.NetworkCredential((Get-VarToString $user), (Get-VarToString $Password))
+        $smtp.Credentials = $Credentials
     }
-    try {
-        $smtp.Send($emailMessage)  
-    }
-    catch {
-        #Get-ErrorReporting $_  
-        write-host "Send-Email exception $($_.Exception)" -foreground red         
-        if ($Counter -gt 0) {
+    
+    $ScriptBlock = {
+        param(
+            [string]                        $Attachments,
+            [string]                        $Bcc,
+            [string]                        $Body,
+            [switch]                        $BodyAsHtml,
+            [Encoding]                      $Encoding,
+            [string]                        $Cc,
+            [DeliveryNotificationOptions]   $DeliveryNotificationOption,
+            [string]                        $From,
+            [string]                        $SmtpServer,
+            [MailPriority]                  $Priority,
+            [string]                        $ReplyTo,
+            [string]                        $Subject,
+            [string]                        $To,
+            [PSCredential]                  $Credential,
+            [switch]                        $UseSsl,
+            [int32]                         $Port,
+            [TimeSpan]                      $TTL,
+            [int16]                         $PauseBetweenTries,
+            [string]                        $logFilePath
+        )
+
+        $Success  = $null
+        $Start    = get-date
+        $Interval = New-TimeSpan -Start (Get-Date)
+        
+        while ((-not $Success) -and ($Interval -lt $TTL)) {
             
-            $Counter = $Counter - 1
-            Write-host ""
-            Write-host "$(get-date) Try $Counter"
-            Start-Sleep -Seconds $PauseBetweenTries
-            
-            $params = @{
-                SmtpServer          = $SmtpServer
-                Subject             = $Subject
-                Body                = $Body
-                HtmlBody            = $HtmlBody
-                User                = $User
-                Password            = $Password
-                From                = $From
-                To                  = $To
-                Port                = $Port
-                SSL                 = $SSL
-                Attachment          = $Attachment
-                AttachmentContentId = $AttachmentContentId
-                Counter             = $Counter
-                PauseBetweenTries   = $PauseBetweenTries  
+            try {
+                $MailParams = @{}                
+                $MailParams += @{Attachments = $Attachments}
+                Send-MailMessage 
+              
+                $Success = $true
             }
-
-            Send-Email @params     
-        }  
-
+            catch { 
+                Add-ToLog -Message $_ -logFilePath $logFilePath -Status "Error"
+                Start-Sleep -Seconds $PauseBetweenTries              
+            } 
+            $Interval = New-TimeSpan -Start $Start           
+        } 
     }
+    
+    $EmailLogFilePath = "$($Global:ProjectRoot)\$($Global:LOGSFolder)\Email.log"
+    #Start-Job -ScriptBlock $ScriptBlock -ArgumentList $SMTP, $emailMessage, $TTL, $PauseBetweenTries, $EmailLogFilePath  
+    
+    $Success  = $False
+    $Start    = get-date
+    $Interval = New-TimeSpan -Start $Start
+    
+    while ((-not $Success) -and ($Interval -lt $TTL)) {        
+        try {
+            $smtp.Send($emailMessage) 
+            $Success = $true
+        }
+        catch { 
+            Add-ToLog -Message $_ -logFilePath $EmailLogFilePath -Status "Error"
+            Start-Sleep -Seconds $PauseBetweenTries              
+        }    
+        $Interval = New-TimeSpan -Start $Start
+    } 
 }
+
 Function Start-PSScript {
 #StartPSScript
     <#
@@ -1091,7 +1132,7 @@ Function Restart-ServiceInInterval {
         Restart-Service $ServiceName -Force  
     } 
 }
-Function Set-TelegramMessage {
+Function New-TelegramMessage {
     <#
     .SYNOPSIS 
         .AUTHOR Alexk
@@ -1110,17 +1151,22 @@ Function Set-TelegramMessage {
     Param(
         [Parameter( Mandatory = $true, Position = 0, HelpMessage = "Telegram token." )]
         [ValidateNotNullOrEmpty()] 
-        [string]$Token,
+        [securestring]$Token,
         [Parameter( Mandatory = $true, Position = 1, HelpMessage = "Telegram chat id." )]
         [ValidateNotNullOrEmpty()] 
-        [string]$ChatID,
+        [securestring]$ChatID,
         [Parameter( Mandatory = $true, Position = 2, HelpMessage = "Message." )]
         [ValidateNotNullOrEmpty()] 
         [string]$Message,
         [Parameter( Mandatory = $false, Position = 3, HelpMessage = "Proxy URL." , ParameterSetName = "Proxy")]
-        [string]$ProxyURL = $null,
+        [string]$ProxyURL,
         [Parameter( Mandatory = $false, Position = 4, HelpMessage = "Proxy credentials." , ParameterSetName = "Proxy")]
-        [System.Management.Automation.PSCredential] $Credentials = $null
+        [System.Management.Automation.PSCredential] $Credentials,
+        [Parameter( Mandatory = $false, Position = 5, HelpMessage = "Message time to live in seconds. Use in case of errors." )]
+        [TimeSpan]$TTL = (New-TimeSpan -Days 1),
+        [Parameter(Mandatory  = $false, Position = 6, HelpMessage = "Pause between retries in seconds." )]
+        [int16]  $PauseBetweenTries   = 30
+
 
     ) 
 
@@ -1128,24 +1174,55 @@ Function Set-TelegramMessage {
         if ([Net.ServicePointManager]::SecurityProtocol -notcontains 'Tls12') {
             [Net.ServicePointManager]::SecurityProtocol += [Net.SecurityProtocolType]::Tls12
         }
+        [System.Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
     }
-    Catch {}
-    [System.Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
-
-    $URI = "https://api.telegram.org/bot" + $Token + "/sendMessage?chat_id=" + $ChatID + "&text=" + $Message
+    Catch { 
+        Add-ToLog -Message "Error while enabling TLS mode [Tls12]!" -Status "Error" -Display -logFilePath $ScriptLogFilePath
+    }    
+   
+    $URI  = "https://api.telegram.org/bot" + (Get-VarToString $Token) + "/sendMessage?chat_id=" + (Get-VarToString $ChatID) + "&text=" + $Message
      
-    if ($null -ne $ProxyURL) {    
-        [system.net.webrequest]::defaultwebproxy = New-Object system.net.webproxy($ProxyURL)
-        [system.net.webrequest]::defaultwebproxy.credentials = $Credentials
-        [system.net.webrequest]::defaultwebproxy.BypassProxyOnLocal = $true
+    if ($ProxyURL) {    
+        [system.net.webrequest]::defaultwebproxy                    = New-Object system.net.webproxy($ProxyURL)
+        [system.net.webrequest]::defaultwebproxy.credentials        = $Credentials
+        [system.net.webrequest]::defaultwebproxy.BypassProxyOnLocal = $true  
+    }
+    
+    $ScriptBlock = {
+        param(
+            [string]    $URI,
+            [TimeSpan]  $TTL,
+            [int16]     $PauseBetweenTries,
+            [string]    $logFilePath
+        )
         
-        $Response = Invoke-RestMethod -Uri $URI
+        $WebRequestSuccess = $null
+        $Start             = Get-Date
+        $Interval          = New-TimeSpan -Start $Start
+        
+        while ((-not $WebRequestSuccess) -and ($Interval -lt $TTL)) {
+            
+            try {
+                $Response = Invoke-RestMethod -Uri $URI
+                switch ($Response.ok) {
+                   $true {                        
+                        $WebRequestSuccess = $True
+                    }
+                    Default { 
+                        Start-Sleep -Seconds $PauseBetweenTries 
+                    }
+                }
+            }
+            catch { 
+                Add-ToLog -Message $_ -logFilePath $logFilePath -Status "Error"
+                Start-Sleep -Seconds $PauseBetweenTries               
+            }   
+            $Interval          = New-TimeSpan -Start $Start         
+        } 
     }
-    else {
-        $Response = Invoke-RestMethod -Uri $URI
-    }
-
-    return $Response
+    
+    $TelegramLogFilePath = "$($Global:ProjectRoot)\$($Global:LOGSFolder)\Telegram.log"
+    Start-Job -ScriptBlock $ScriptBlock -ArgumentList $URI, $TTL, $PauseBetweenTries, $TelegramLogFilePath    
 }
 function Get-SettingsFromFile {
 #Get-Vars
@@ -1784,13 +1861,16 @@ function Invoke-PSScriptBlock {
         [Parameter( Mandatory = $False, Position = 4, ParameterSetName = "Remote", HelpMessage = "Test-connection before session." )]
         [Switch]  $TestComputer,
         [Parameter( Mandatory = $False, Position = 5, ParameterSetName = "Remote", HelpMessage = "Array of exported parameters." )]
-        $ExportedParameters
+        $ExportedParameters,
+        [Parameter( Mandatory = $False, Position = 6, ParameterSetName = "Remote", HelpMessage = "Open session timeout in milliseconds." )]
+        $SessionTimeOut = 180000
     )
     
     $Res = $null
 
     try {
         if ($Computer) {            
+            $PSSessionOption = New-PSSessionOption -OpenTimeout $SessionTimeOut
             if ($TestComputer) {
                 $Connection = Test-Connection -ComputerName $Computer -count 2 -Delay 1 -Quiet
                 if (!$Connection){
@@ -1802,12 +1882,12 @@ function Invoke-PSScriptBlock {
             }
             if ($Credentials) {            
                 if($Connection) {
-                    $Session = New-PSSession -ComputerName $Computer -Credential  $Credentials
+                    $Session = New-PSSession -ComputerName $Computer -Credential  $Credentials -SessionOption $PSSessionOption
                 }
             }
             Else {
                 if($Connection) {
-                    $Session = New-PSSession -ComputerName $Computer
+                    $Session = New-PSSession -ComputerName $Computer -SessionOption $PSSessionOption
                 }
             }
             if ($ImportLocalModule){
@@ -2350,4 +2430,143 @@ function Test-ElevatedRights {
     return $Res
 }
 
-Export-ModuleMember -Function Get-NewAESKey, Import-SettingsFromFile, Get-VarFromAESFile, Set-VarToAESFile, Disconnect-VPN, Connect-VPN, Add-ToLog, Restart-Switches, Restart-SwitchInInterval, Get-EventList, Send-Email, Start-PSScript, Restart-LocalHostInInterval, Show-Notification, Restart-ServiceInInterval, Set-TelegramMessage, Get-SettingsFromFile, Get-HTMLTable, Get-HTMLCol, Get-ContentFromHTMLTemplate, Get-ErrorReporting, Get-CopyByBITS, Show-OpenDialog, Import-ModuleRemotely, Invoke-PSScriptBlock, Get-ACLArray, Set-PSModuleManifest, Get-VarToString, Get-UniqueArrayMembers, Resolve-IPtoFQDNinArray, Get-HelpersData, Get-DifferenceBetweenArrays, Test-Credentials, Convert-FSPath, Start-Program, Test-ElevatedRights, Invoke-CommandWithDebug
+Function Format-TimeSpan {
+    <#
+    .SYNOPSIS 
+        .AUTHOR Alexk
+        .DATE 21.06.2020
+        .VER 1   
+    .DESCRIPTION
+     Function to set time span presentation.
+    .EXAMPLE
+    Format-TimeSpan -EventLogScriptPath "d:\test\events.ps1" -ScriptPath $ScriptPath 
+#>  
+    [CmdletBinding()]
+    param
+    (
+        [Parameter( Mandatory = $true, Position = 0, HelpMessage = "Time span." )]
+        [ValidateNotNullOrEmpty()]        
+        [TimeSpan] $TimeSpan,
+        [Parameter( Mandatory = $False, Position = 1, HelpMessage = "Time span format.")]
+        [ValidateSet("Auto", "Ticks", "TotalDays", "TotalHours", "TotalMinutes", "TotalSeconds", "TotalMilliseconds")]
+        [string] $Format = "Auto",
+        [Parameter( Mandatory = $false, Position = 2, HelpMessage = "Number of digits after dot." )]
+        [ValidateNotNullOrEmpty()]        
+        [Int16] $Round = 0
+    ) 
+    $Res = $Null
+    switch ($Format) {
+        "Auto" {  
+            if ($TimeSpan.days -ge 1 ) {
+                $Res = "$([math]::round($TimeSpan.days,$Round)) days"
+            }
+            ElseIf ( $TimeSpan.Hours -ge 1 ) {
+                $Res = "$([math]::round($TimeSpan.Hours,$Round)) hours"
+            }
+            ElseIf ( $TimeSpan.Minutes -ge 1 ) {
+                $Res = "$([math]::round($TimeSpan.Minutes,$Round)) minutes"
+            }
+            ElseIf ( $TimeSpan.Seconds -ge 1 ) {
+                $Res = "$([math]::round($TimeSpan.Seconds,$Round)) seconds"
+            }
+            ElseIf ( $TimeSpan.Milliseconds -ge 1 ) {
+                $Res = "$([math]::round($TimeSpan.Milliseconds,$Round)) milliseconds"
+            }
+            ElseIf ( $TimeSpan.Ticks -ge 1 ) {
+                $Res = "$([math]::round($TimeSpan.TotalDays,$Round)) ticks"
+            }  
+        }       
+        "TotalDays" {  
+            $Res = "$([math]::round($TimeSpan.TotalDays,$Round)) days"
+        }
+        "TotalHours" {  
+            $Res = "$([math]::round($TimeSpan.TotalHours,$Round)) hours"
+        }
+        "TotalMinutes" {  
+            $Res = "$([math]::round($TimeSpan.TotalMinutes,$Round)) minutes"
+        }
+        "TotalSeconds" {  
+            $Res = "$([math]::round($TimeSpan.TotalSeconds,$Round)) seconds"
+        }
+        "TotalMilliseconds" {  
+            $Res = "$([math]::round($TimeSpan.TotalMilliseconds,$Round)) milliseconds"
+        }
+        "Ticks" {  
+            $Res = "$($TimeSpan.ticks) ticks"
+        }
+        Default {}
+    }
+    return $res
+}
+
+Function Start-ParallelPortPing {
+<#
+    .SYNOPSIS 
+        .AUTHOR Alexk
+        .DATE 23.06.2020
+        .VER 1   
+    .DESCRIPTION
+        Function to start parallel host ping with port.
+        We can use port in host name.
+    .EXAMPLE
+    Start-ParallelPortPing -Hosts $Hosts 
+#>  
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory = $true,  Position = 1, HelpMessage = "Network hosts array.")]
+        [string[]] $Hosts,
+        [Parameter(Mandatory = $false, Position = 2, HelpMessage = "Number of ping counts.")]
+        [int16] $Count = 1,
+        [Parameter(Mandatory = $false, Position = 3, HelpMessage = "Delay in seconds.")]
+        [int16] $Delay = 1
+    )
+
+    $Jobs = @()
+    foreach ($Item in $Hosts) {        
+        $ScriptBlock = {
+            param(
+                [string] $NetworkHost,
+                [int16]  $Count,
+                [int16]  $Delay,
+                [int16]  $Port
+            ) 
+            if ($port) {
+                $Ping = Test-Connection $NetworkHost -TcpPort $Port -Quiet 
+            }
+            Else {
+                $Ping = Test-Connection $NetworkHost -Quiet -Count $Count -Delay $Delay 
+            }
+            $PSO = [PSCustomObject]@{
+                Host  = [string]$NetworkHost
+                Port  = [int16] $Port
+                Count = [int16] $Count
+                Delay = [int16] $Delay
+                Ping  = [bool]  $Ping                
+            }
+            Return  $PSO
+        }        
+        
+        $HostArray = @($item.split(":"))
+        if ($HostArray.count -eq 2) {
+            $NetworkHost = $HostArray[0]
+            $Port = [int16]$HostArray[1]
+        } 
+        Else {
+            $NetworkHost = $item
+            $Port = 0   
+        } 
+        $Jobs += (Start-Job $ScriptBlock -ArgumentList $NetworkHost, $Count, $Delay, $Port)
+    }    
+
+    While ( $Jobs.state -contains "Running" ) {
+        Start-Sleep -Milliseconds 300
+    } 
+
+    $Res = $Jobs | Receive-Job 
+    $Jobs | Remove-Job | Out-Null
+
+    Return $Res
+}
+
+
+Export-ModuleMember -Function Get-NewAESKey, Import-SettingsFromFile, Get-VarFromAESFile, Set-VarToAESFile, Disconnect-VPN, Connect-VPN, Add-ToLog, Restart-Switches, Restart-SwitchInInterval, Get-EventList, Send-Email, Start-PSScript, Restart-LocalHostInInterval, Show-Notification, Restart-ServiceInInterval, New-TelegramMessage, Get-SettingsFromFile, Get-HTMLTable, Get-HTMLCol, Get-ContentFromHTMLTemplate, Get-ErrorReporting, Get-CopyByBITS, Show-OpenDialog, Import-ModuleRemotely, Invoke-PSScriptBlock, Get-ACLArray, Set-PSModuleManifest, Get-VarToString, Get-UniqueArrayMembers, Resolve-IPtoFQDNinArray, Get-HelpersData, Get-DifferenceBetweenArrays, Test-Credentials, Convert-FSPath, Start-Program, Test-ElevatedRights, Invoke-CommandWithDebug, Format-TimeSpan, Start-ParallelPortPing
