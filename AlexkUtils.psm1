@@ -1349,38 +1349,39 @@ function Get-ErrorReporting {
         [ValidateNotNullOrEmpty()]
         $Trap
     )
-    [string]$PreviousCommand = $Trap.InvocationInfo.line
+    [string]$PreviousCommand = $Trap.InvocationInfo.line.Trim()
     try{
         [string]$PreviousCommandReplacedArgs = (Invoke-Expression -command "return `"$PreviousCommand`"").trim()
         [string]$PreviousCommandReplacedArgs = $PreviousCommandReplacedArgs.Insert(($Trap.InvocationInfo.OffsetInLine-1), '!')
     }
     Catch {}    
-    [string]$Trap1 = $Trap
-    [string]$Trap1 = ($Trap1.replace("[", "")).replace("]", "")
-    [string]$line = $Trap.InvocationInfo.ScriptLineNumber
-    [string]$Script = $Trap.InvocationInfo.ScriptName
-    [string]$StackTrace = $Trap.ScriptStackTrace
-    [array] $UpDownStackTrace = @($StackTrace.Split("`n"))
-    [int16] $ItemCount = $UpDownStackTrace.Count
-    [array] $TempStackTrace = @(1..$ItemCount )
+    [string]$Trap1             = $Trap
+    [string]$Trap1             = ($Trap1.replace("[", "")).replace("]", "")
+    [string]$line              = $Trap.InvocationInfo.ScriptLineNumber
+    [string]$Script            = $Trap.InvocationInfo.ScriptName
+    [string]$StackTrace        = $Trap.ScriptStackTrace
+    [array]  $UpDownStackTrace = @($StackTrace.Split("`n"))
+    [int16]  $ItemCount        = $UpDownStackTrace.Count
+    [array]  $TempStackTrace   = @(1..$ItemCount )
     
     foreach ($item in $UpDownStackTrace) {
-        $TempStackTrace[$ItemCount - 1] = $item
-        $ItemCount -= 1
+        $Data = $Item.Split(",")
+        $TempStackTrace[$ItemCount - 1]  = "$($Data[0]), `"$($Data[1].trim())`""
+                        $ItemCount      -= 1
     }
-    $UpDownStackTrace = $TempStackTrace -join "`n"
+    $UpDownStackTrace = $TempStackTrace -join "`n"    
 
-    [string]$Trace = $UpDownStackTrace | ForEach-Object { ((($_ -replace "`n", "`n    ") -replace " line ", "") -replace "at ", "") -replace "<ScriptBlock>", "ScriptBlock" }
+    [string]$Trace  = $UpDownStackTrace | ForEach-Object { ((($_ -replace "`n", "`n    ") -replace " line ", "") -replace "at ", "") -replace "<ScriptBlock>", "ScriptBlock" }
     [string]$Trace1 = $UpDownStackTrace | ForEach-Object { ((($_ -replace "`n", "`n ") -replace " line ", "") -replace "at ", "") -replace "<ScriptBlock>", "ScriptBlock" }
     if ($Script -ne $Trap.Exception.ErrorRecord.InvocationInfo.ScriptName) {
-        [string]$Module = (($Trap.ScriptStackTrace).split(",")[1]).split("`n")[0].replace(" line ", "").Trim()
+        [string]$Module   = (($Trap.ScriptStackTrace).split(",")[1]).split("`n")[0].replace(" line ", "").Trim()
         [string]$Function = (($Trap.ScriptStackTrace).split(",")[0]).replace("at ", "")
-        [string]$ToScreen = "$Trap `n    Script:   `"$($Script):$($line)`"`n    Module:   `"$Module`"`n    Function: `"$Function`""
-        [string]$Message = "$Trap1 [script] `'$PreviousCommandReplacedArgs`' $Trace1"         
+        [string]$ToScreen = $Trap #"$Trap `n    Script:   `"$($Script):$($line)`"`n    Module:   `"$Module`"`n    Function: `"$Function`""
+        [string]$Message  = "$Trap1 [script] `'$PreviousCommandReplacedArgs`' $Trace1"
     }
     else { 
         [string]$Message = "$Trap1 [script] `'$PreviousCommandReplacedArgs`' $Trace1"        
-        $ToScreen = "$Trap `n   $($Script):$($line)"
+        $ToScreen        = "$Trap `n   $($Script):$($line)"
     }
  
     $Message = $Message.Replace("`n", "|") 
@@ -1396,7 +1397,7 @@ function Get-ErrorReporting {
     Write-Host "Stack trace:" -ForegroundColor green     
     Write-Host "    $Trace" -ForegroundColor green
     Write-Host "Previous command:" -ForegroundColor Yellow
-    Write-Host "    $PreviousCommand" -ForegroundColor Yellow -NoNewline
+    Write-Host "    $PreviousCommand" -ForegroundColor Yellow
     Write-Host "    $PreviousCommandReplacedArgs" -ForegroundColor Yellow
     Write-Host "====================================================================================================================================================" -ForegroundColor Red
 }
