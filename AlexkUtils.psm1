@@ -2569,5 +2569,54 @@ Function Start-ParallelPortPing {
     Return $Res
 }
 
+Function Invoke-ArrayUnion {
+    <#
+    .SYNOPSIS 
+        .AUTHOR Alexk
+        .DATE 23.06.2020
+        .VER 1   
+    .DESCRIPTION
+        Function to union two array by key argument.
+    .EXAMPLE
+    Invoke-ArrayUnion -PrimaryPSO $PrimaryPSO -SecondaryPSO $SecondaryPSO -Key $Key -MergeColumns $MergeColumns
+#>  
+    [CmdletBinding()]
+    [OutputType([array])]
+    param(
+        [Parameter(Mandatory = $true, Position = 1, HelpMessage = "Base PSO.")]
+        [PSCustomObject] $PrimaryPSO,
+        [Parameter(Mandatory = $true, Position = 2, HelpMessage = "PSO with data to merge.")]
+        [PSCustomObject] $SecondaryPSO,
+        [Parameter(Mandatory = $true, Position = 3, HelpMessage = "Merge keys of primary and secondary arrays.")]
+        [Array] $Key,
+        [Parameter(Mandatory = $false, Position = 4, HelpMessage = "Merge columns.")]
+        [array] $MergeColumns
+    )
+    [array] $Output = @()
+    $PrimaryPSOColumns   = ($PrimaryPSO   | Get-Member -type NoteProperty).name
+    $SecondaryPSOColumns = ($SecondaryPSO | Get-Member -type NoteProperty).name
+    foreach ( $PrimaryItem in $PrimaryPSO ) {
+        foreach ( $SecondaryItem in $SecondaryPSO ) {
+            if ( $PrimaryItem.($Key[0]) -eq $SecondaryItem.($Key[1]) ) {
+                if ( $MergeColumn ) {
+                    foreach ( $MergeColumn in $MergeColumns ) {
+                        $PrimaryItem | Add-Member -MemberType NoteProperty -Name $MergeColumn -Value $SecondaryItem.$MergeColumn                        
+                    }
+                    $Output += $PrimaryItem
+                }
+                Else {
+                    foreach ( $Column in $SecondaryPSOColumns ) {
+                        if ( ($PrimaryPSOColumns -NotContains $Column) -and ($Column -ne $Key[1]) ) {
+                            $PrimaryItem | Add-Member -MemberType NoteProperty -Name $Column -Value $SecondaryItem.$Column
+                        }
+                    }
+                    $Output += $PrimaryItem
+                }
+            }
+        }      
+    } 
 
-Export-ModuleMember -Function Get-NewAESKey, Import-SettingsFromFile, Get-VarFromAESFile, Set-VarToAESFile, Disconnect-VPN, Connect-VPN, Add-ToLog, Restart-Switches, Restart-SwitchInInterval, Get-EventList, Send-Email, Start-PSScript, Restart-LocalHostInInterval, Show-Notification, Restart-ServiceInInterval, New-TelegramMessage, Get-SettingsFromFile, Get-HTMLTable, Get-HTMLCol, Get-ContentFromHTMLTemplate, Get-ErrorReporting, Get-CopyByBITS, Show-OpenDialog, Import-ModuleRemotely, Invoke-PSScriptBlock, Get-ACLArray, Set-PSModuleManifest, Get-VarToString, Get-UniqueArrayMembers, Resolve-IPtoFQDNinArray, Get-HelpersData, Get-DifferenceBetweenArrays, Test-Credentials, Convert-FSPath, Start-Program, Test-ElevatedRights, Invoke-CommandWithDebug, Format-TimeSpan, Start-ParallelPortPing
+    return $Output
+}
+
+Export-ModuleMember -Function Get-NewAESKey, Import-SettingsFromFile, Get-VarFromAESFile, Set-VarToAESFile, Disconnect-VPN, Connect-VPN, Add-ToLog, Restart-Switches, Restart-SwitchInInterval, Get-EventList, Send-Email, Start-PSScript, Restart-LocalHostInInterval, Show-Notification, Restart-ServiceInInterval, New-TelegramMessage, Get-SettingsFromFile, Get-HTMLTable, Get-HTMLCol, Get-ContentFromHTMLTemplate, Get-ErrorReporting, Get-CopyByBITS, Show-OpenDialog, Import-ModuleRemotely, Invoke-PSScriptBlock, Get-ACLArray, Set-PSModuleManifest, Get-VarToString, Get-UniqueArrayMembers, Resolve-IPtoFQDNinArray, Get-HelpersData, Get-DifferenceBetweenArrays, Test-Credentials, Convert-FSPath, Start-Program, Test-ElevatedRights, Invoke-CommandWithDebug, Format-TimeSpan, Start-ParallelPortPing, Invoke-ArrayUnion
