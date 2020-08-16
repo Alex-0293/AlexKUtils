@@ -971,14 +971,14 @@ Function Restart-SwitchInInterval {
             #write-host "time interval between host reboot $TimeInterval"
             if ($timeInterval -gt $MinIntervalBetweenReboots) {
                 #Add-ToLog $Event $EventLogPath 
-                ShowNotification "RebootSwitchesInInterval" "Try to reboot switch $($Switch.switchip)!" "Info" "C:\DATA\PROJECTS\ConnectVPN\VPN.log" 10
-                Restart-Switches $Switch $logFilePath $PlinkPath $SshConString $SshCommand $Login $Password $CertFilePath
+                Show-Notification "RebootSwitchesInInterval" "Try to reboot switch $($Switch.SwitchIp)!" "Info" $logFilePath 10
+                Restart-Switches -SwitchesIP $Switch -logFilePath $logFilePath -PLinkPath $PlinkPath -SshConString $SshConString -SshCommand $SshCommand -CertFilePath $CertFilePath
             }
         }
         Else {
             #Add-ToLog $Event $EventLogPath
-            RebootSwitches $Switch $EventLogPath $PlinkPath $SshConString $SshCommand $Null $Null $CertFilePath
-            ShowNotification "RebootSwitchesInInterval" "Try to reboot switch $($Switch.SwitchIp)!" "Info" "C:\DATA\PROJECTS\ConnectVPN\VPN.log" 10
+            Restart-Switches -SwitchesIP $Switch -logFilePath $logFilePath -PLinkPath $PlinkPath -SshConString $SshConString -SshCommand $SshCommand -CertFilePath $CertFilePath
+            Show-Notification "RebootSwitchesInInterval" "Try to reboot switch $($Switch.SwitchIp)!" "Info" $logFilePath 10
         } 
     }
 
@@ -2569,7 +2569,7 @@ Function Start-ParallelPortPing {
     Return $Res
 }
 
-Function Invoke-ArrayUnion {
+Function Join-Array {
     <#
     .SYNOPSIS 
         .AUTHOR Alexk
@@ -2578,7 +2578,7 @@ Function Invoke-ArrayUnion {
     .DESCRIPTION
         Function to union two array by key argument.
     .EXAMPLE
-    Invoke-ArrayUnion -PrimaryPSO $PrimaryPSO -SecondaryPSO $SecondaryPSO -Key $Key -MergeColumns $MergeColumns
+    Join-Array -PrimaryPSO $PrimaryPSO -SecondaryPSO $SecondaryPSO -Key $Key -MergeColumns $MergeColumns
 #>  
     [CmdletBinding()]
     [OutputType([array])]
@@ -2618,5 +2618,134 @@ Function Invoke-ArrayUnion {
 
     return $Output
 }
+Function Set-State {
+    <#
+    .SYNOPSIS 
+        .AUTHOR Alexk
+        .DATE 05.08.2020
+        .VER 1   
+    .DESCRIPTION
+     Save object state to file
+    .EXAMPLE
+    Set-State -StateObject $StateObject -StateFilePath $StateFilePath -Alert $Alert -AlertOnChange -SaveOnChange
+#> 
+    [CmdletBinding()]
+    Param (
+        [Parameter( Mandatory = $true, Position = 1, HelpMessage = "State object." )]
+        [PSCustomObject] $StateObject,
+        [Parameter( Mandatory = $true, Position = 2, HelpMessage = "State file path." )]
+        [String] $StateFilePath,
+        [Parameter( Mandatory = $false, Position = 3, HelpMessage = "Send alert to." )]
+        [string] $AlertType, 
+        [Parameter( Mandatory = $false, Position = 4, HelpMessage = "Alert only on global state change." )]
+        [switch] $AlertOnChange,
+        [Parameter( Mandatory = $false, Position = 5, HelpMessage = "Save only on global state change." )]
+        [switch] $SaveOnChange
+    ) 
 
-Export-ModuleMember -Function Get-NewAESKey, Import-SettingsFromFile, Get-VarFromAESFile, Set-VarToAESFile, Disconnect-VPN, Connect-VPN, Add-ToLog, Restart-Switches, Restart-SwitchInInterval, Get-EventList, Send-Email, Start-PSScript, Restart-LocalHostInInterval, Show-Notification, Restart-ServiceInInterval, New-TelegramMessage, Get-SettingsFromFile, Get-HTMLTable, Get-HTMLCol, Get-ContentFromHTMLTemplate, Get-ErrorReporting, Get-CopyByBITS, Show-OpenDialog, Import-ModuleRemotely, Invoke-PSScriptBlock, Get-ACLArray, Set-PSModuleManifest, Get-VarToString, Get-UniqueArrayMembers, Resolve-IPtoFQDNinArray, Get-HelpersData, Get-DifferenceBetweenArrays, Test-Credentials, Convert-FSPath, Start-Program, Test-ElevatedRights, Invoke-CommandWithDebug, Format-TimeSpan, Start-ParallelPortPing, Invoke-ArrayUnion
+    if (Test-Path $StateFilePath) {
+        if ( $StateFilePath.ToLower().contains("csv") ) {
+            $States = Import-Csv -Path $StateFilePath
+        }
+        ElseIf ( $StateFilePath.ToLower().contains("xml") ) {
+            $States = Import-Clixml -Path $StateFilePath 
+        }     
+    }
+    Else {
+        $States = @()
+    }   
+
+    $LastState = $States | Select-Object -Last 1
+    $StateChanged = $LastState.State -ne $StateObject.State
+    $StateObject.date = Get-Date
+    $AlertMessage = @"
+$($StateObject.Application)@$($StateObject.Host)[$(Get-Date $StateObject.date -Format HH:mm)]
+$($StateObject.Action)
+$($StateObject.State)
+Global state: $($StateObject.GlobalState)
+"@
+    if ( $AlertOnChange ) {
+        if ($StateChanged) {
+            switch ($AlertType.ToLower()) {
+                "telegram" {  
+                    if ($Global:TelegramParameters) {
+                        Send-Alert -AlertParameters $Global:TelegramParameters -AlertMessage $AlertMessage
+                    }
+                    Else {
+                        Add-ToLog -Message "Telegram parameters not set! Plugin not available" -logFilePath $ScriptLogFilePath -Display -Status "Error" 
+                    }
+                }
+                Default {}
+            } 
+        }         
+    } 
+    Else {
+        switch ($AlertType.ToLower()) {
+            "telegram" {  
+                if ($Global:TelegramParameters) {
+                    Send-Alert -AlertParameters $Global:TelegramParameters -AlertMessage $AlertMessage
+                }
+                Else {
+                    Add-ToLog -Message "Telegram parameters not set! Plugin not available" -logFilePath $ScriptLogFilePath -Display -Status "Error"
+                }
+            }
+            Default {}
+        }  
+    }
+    
+    if ( $SaveOnChange ) {
+        if ($StateChanged) {
+            [array] $States += $StateObject
+            if ( $StateFilePath.ToLower().contains("csv") ) {
+                $States | ConvertTo-Csv -NoTypeInformation | Out-File -FilePath $StateFilePath -Force
+            }
+            ElseIf ( $StateFilePath.ToLower().contains("xml") ) {
+                $States | Export-Clixml -Path $StateFilePath -Force
+            }   
+        }
+    }
+    Else {
+        [array] $States += $StateObject
+        if ( $StateFilePath.ToLower().contains("csv") ) {
+            $States | ConvertTo-Csv -NoTypeInformation | Out-File -FilePath $StateFilePath -Force
+        }
+        ElseIf ( $StateFilePath.ToLower().contains("xml") ) {
+            $States | Export-Clixml -Path $StateFilePath -Force
+        }   
+    }
+}
+Function Send-Alert {
+    <#
+    .SYNOPSIS 
+        .AUTHOR Alexk
+        .DATE 05.08.2020
+        .VER 1   
+    .DESCRIPTION
+     Send alert by custom transport.
+    .EXAMPLE
+    Send-Alert -AlertParameters $AlertParameters -AlertMessage $AlertMessage -AlertSubject $AlertSubject
+#>     
+    [CmdletBinding()]
+    Param (
+        [Parameter( Mandatory = $True, Position = 1, HelpMessage = "Alert parameters.")]
+        $AlertParameters,        
+        [Parameter( Mandatory = $True, Position = 2, HelpMessage = "Alert message.")]
+        [string] $AlertMessage,
+        [Parameter( Mandatory = $false, Position = 3, HelpMessage = "Alert subject.")]
+        [string] $AlertSubject  
+    )
+    switch ([string]$AlertParameters.name.ToLower()) {
+        "telegram" {  
+            $Data = $AlertParameters.data                
+            New-TelegramMessage @Data -Message $AlertMessage  
+        }
+        "email" {
+            $Data = $AlertParameters.data
+            Send-Email @Data -SSL -Subject $AlertSubject -Body $AlertMessage 
+
+        }
+        Default {}
+    }   
+}
+
+Export-ModuleMember -Function Get-NewAESKey, Import-SettingsFromFile, Get-VarFromAESFile, Set-VarToAESFile, Disconnect-VPN, Connect-VPN, Add-ToLog, Restart-Switches, Restart-SwitchInInterval, Get-EventList, Send-Email, Start-PSScript, Restart-LocalHostInInterval, Show-Notification, Restart-ServiceInInterval, New-TelegramMessage, Get-SettingsFromFile, Get-HTMLTable, Get-HTMLCol, Get-ContentFromHTMLTemplate, Get-ErrorReporting, Get-CopyByBITS, Show-OpenDialog, Import-ModuleRemotely, Invoke-PSScriptBlock, Get-ACLArray, Set-PSModuleManifest, Get-VarToString, Get-UniqueArrayMembers, Resolve-IPtoFQDNinArray, Get-HelpersData, Get-DifferenceBetweenArrays, Test-Credentials, Convert-FSPath, Start-Program, Test-ElevatedRights, Invoke-CommandWithDebug, Format-TimeSpan, Start-ParallelPortPing, Join-Array, Set-State, Send-Alert
