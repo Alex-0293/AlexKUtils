@@ -863,7 +863,7 @@ Function Start-Program {
     #$ProcessInfo.RedirectStandardOutput = $true
     $ProcessInfo.CreateNoWindow         = $true
 
-    $Message               = "User [$($RunningCredentials.Name)]. Start program [$Program]" 
+    $Message               = "User [$($RunningCredentials.Name)]. Starting program [$Program]" 
  
     if($Credentials){        
         if ($RunningCredentials.name -ne $Credentials.UserName) {
@@ -1188,14 +1188,17 @@ Function New-TelegramMessage {
         [system.net.webrequest]::defaultwebproxy.BypassProxyOnLocal = $true  
     }
     
+    #function Send-Telegram {
     $ScriptBlock = {
         param(
             [string]    $URI,
             [TimeSpan]  $TTL,
             [int16]     $PauseBetweenTries,
-            [string]    $logFilePath
+            [string]    $logFilePath,
+            [string]    $Message
         )
-        
+        Import-Module -name AlexkUtils
+
         $WebRequestSuccess = $null
         $Start             = Get-Date
         $Interval          = New-TimeSpan -Start $Start
@@ -1212,9 +1215,10 @@ Function New-TelegramMessage {
                         Start-Sleep -Seconds $PauseBetweenTries 
                     }
                 }
+                Add-ToLog -Message $Message -logFilePath $logFilePath -Status "Info"
             }
             catch { 
-                Add-ToLog -Message $_ -logFilePath $logFilePath -Status "Error"
+                Add-ToLog -Message "$Message [$_]" -logFilePath $logFilePath -Status "Error"
                 Start-Sleep -Seconds $PauseBetweenTries               
             }   
             $Interval          = New-TimeSpan -Start $Start         
@@ -1222,7 +1226,8 @@ Function New-TelegramMessage {
     }
     
     $TelegramLogFilePath = "$($Global:ProjectRoot)\$($Global:LOGSFolder)\Telegram.log"
-    Start-Job -ScriptBlock $ScriptBlock -ArgumentList $URI, $TTL, $PauseBetweenTries, $TelegramLogFilePath    
+    Start-Job -ScriptBlock $ScriptBlock -ArgumentList $URI, $TTL, $PauseBetweenTries, $TelegramLogFilePath, $Message    
+    #Send-Telegram $URI $TTL $PauseBetweenTries $TelegramLogFilePath $Message
 }
 function Get-SettingsFromFile {
 #Get-Vars
@@ -1796,22 +1801,28 @@ function Import-ModuleRemotely {
     Param(
         [Parameter( Mandatory = $true, Position = 0, HelpMessage = "Local powershell module name." )]
         [ValidateNotNullOrEmpty()]
-        [string] $ModuleName,
+        [string[]] $Modules,
         [Parameter( Mandatory = $true, Position = 1, HelpMessage = "Powershell session." )]
         [ValidateNotNullOrEmpty()]
         [System.Management.Automation.RunSpaces.PSSession] $Session
     )
 
-    $Module = Import-Module $ModuleName -PassThru
-    if (!$Module)
-    { 
-        write-warning "Local module does not exist $ModuleName"; 
-        return; 
-    }  
+    $ModuleList = @()
+    foreach ($Module in $Modules){
+        $Res = Import-Module $Module -PassThru
+        if (!$Res)
+        { 
+            Write-Warning "Local module does not exist [$Module]"; 
+            return; 
+        } 
+        Else {
+            $ModuleList += $Res
+        } 
+    }
     
     $ScriptBlock = {
-        [string]$ModuleName        = $using:ModuleName
-        [string]$Definition        = $using:Module.Definition
+        $Modules           = $using:ModuleList
+        #[string]   $Definition        = $using:Module.Definition
         ##### Init remote variables
         [string]   $ScriptLocalHost            = $using:ScriptLocalHost
         [array]    $Global:LogBuffer           = @()
@@ -1820,15 +1831,26 @@ function Import-ModuleRemotely {
         [string]   $Global:LogFileNamePosition = $using:LogFileNamePosition
         $Global:RunningCredentials             = [System.Security.Principal.WindowsIdentity]::GetCurrent()
         
-        $ScriptBlock     = {
-            if (get-module $ModuleName)
-            {
-                remove-module $ModuleName -Force
+        foreach ($Module in $Modules){
+            $ScriptBlock     = {
+                $ModuleName = $Module.name
+                if (Get-Module $ModuleName)
+                {
+                    Remove-Module $ModuleName -Force
+                }
+
+                $Definition = $Module.Definition
+                $SB = [ScriptBlock]::Create($Definition)
+                $Res = New-Module -Name $ModuleName -ScriptBlock $SB | Import-Module -Force -PassThru  
+                
+                if ($Res) {
+                    Write-Host "Imported module [$ModuleName] in remote session."
+                    #Write-Host "$(Get-Module $ModuleName | Select-Object -ExpandProperty ExportedCommands | Out-String)"
+                }
             }
-            $SB = [ScriptBlock]::Create($Definition)
-            New-Module -name $ModuleName -scriptblock $SB | import-module -force
+            . ([ScriptBlock]::Create($ScriptBlock))
         }
-        . ([ScriptBlock]::Create($ScriptBlock))
+        
     }
 
     invoke-command -session $Session -scriptblock $ScriptBlock;      
@@ -1857,8 +1879,8 @@ function Invoke-PSScriptBlock {
         [string] $Computer,
         [Parameter( Mandatory = $False, Position = 2, ParameterSetName = "Remote", HelpMessage = "Remote credentials." )]
         [System.Management.Automation.PSCredential]  $Credentials, 
-        [Parameter( Mandatory = $False, Position = 3, ParameterSetName = "Remote", HelpMessage = "Remote credentials." )]
-        [string]  $ImportLocalModule,  
+        [Parameter( Mandatory = $False, Position = 3, ParameterSetName = "Remote", HelpMessage = "Local modules to import to remote session." )]
+        [string[]]  $ImportLocalModule,  
         [Parameter( Mandatory = $False, Position = 4, ParameterSetName = "Remote", HelpMessage = "Test-connection before session." )]
         [Switch]  $TestComputer,
         [Parameter( Mandatory = $False, Position = 5, ParameterSetName = "Remote", HelpMessage = "Array of exported parameters." )]
@@ -1867,8 +1889,9 @@ function Invoke-PSScriptBlock {
         $SessionTimeOut = 180000
     )
     
-    $Res = $null
-
+    $Res     = $null
+    $Session = $null
+    
     try {
         if ($Computer) {            
             $PSSessionOption = New-PSSessionOption -OpenTimeout $SessionTimeOut
@@ -1891,8 +1914,13 @@ function Invoke-PSScriptBlock {
                     $Session = New-PSSession -ComputerName $Computer -SessionOption $PSSessionOption
                 }
             }
-            if ($ImportLocalModule){
-                Import-ModuleRemotely -ModuleName $ImportLocalModule -Session $Session
+            if ( $Session ) {
+                if ($ImportLocalModule){
+                    Import-ModuleRemotely -Modules $ImportLocalModule -Session $Session
+                }
+            }
+            Else {
+                Add-ToLog -Message "[Error] $_" -logFilePath "$(Split-Path -Path $Global:MyScriptRoot -Parent)\LOGS\Errors.log" -Status "Error" -Format "dd.MM.yyyy HH:mm:ss" -ErrorAction SilentlyContinue
             }
         }
         Else {
@@ -2606,8 +2634,18 @@ Function Join-Array {
                 }
                 Else {
                     foreach ( $Column in $SecondaryPSOColumns ) {
-                        if ( ($PrimaryPSOColumns -NotContains $Column) -and ($Column -ne $Key[1]) ) {
-                            $PrimaryItem | Add-Member -MemberType NoteProperty -Name $Column -Value $SecondaryItem.$Column
+                        if ( ($Column -ne $Key[1]) ) {
+                            if ( $PrimaryPSOColumns -NotContains $Column ) {
+                                $PrimaryItem | Add-Member -MemberType NoteProperty -Name $Column -Value $SecondaryItem.$Column
+                            }
+                            Else {
+                                [int] $Counter = 1
+                                do {
+                                    $NewColumn = "$Column$Counter"
+                                    $Counter ++
+                                } until ($PrimaryPSOColumns -NotContains $NewColumn)
+                                $PrimaryItem | Add-Member -MemberType NoteProperty -Name $NewColumn -Value $SecondaryItem.$Column
+                            }
                         }
                     }
                     $Output += $PrimaryItem
@@ -2670,6 +2708,7 @@ Global state: $($StateObject.GlobalState)
                 "telegram" {  
                     if ($Global:TelegramParameters) {
                         Send-Alert -AlertParameters $Global:TelegramParameters -AlertMessage $AlertMessage
+                        Add-ToLog -Message "Sent telegram message." -logFilePath $ScriptLogFilePath -Display -Status "Info" 
                     }
                     Else {
                         Add-ToLog -Message "Telegram parameters not set! Plugin not available" -logFilePath $ScriptLogFilePath -Display -Status "Error" 
@@ -2748,4 +2787,54 @@ Function Send-Alert {
     }   
 }
 
-Export-ModuleMember -Function Get-NewAESKey, Import-SettingsFromFile, Get-VarFromAESFile, Set-VarToAESFile, Disconnect-VPN, Connect-VPN, Add-ToLog, Restart-Switches, Restart-SwitchInInterval, Get-EventList, Send-Email, Start-PSScript, Restart-LocalHostInInterval, Show-Notification, Restart-ServiceInInterval, New-TelegramMessage, Get-SettingsFromFile, Get-HTMLTable, Get-HTMLCol, Get-ContentFromHTMLTemplate, Get-ErrorReporting, Get-CopyByBITS, Show-OpenDialog, Import-ModuleRemotely, Invoke-PSScriptBlock, Get-ACLArray, Set-PSModuleManifest, Get-VarToString, Get-UniqueArrayMembers, Resolve-IPtoFQDNinArray, Get-HelpersData, Get-DifferenceBetweenArrays, Test-Credentials, Convert-FSPath, Start-Program, Test-ElevatedRights, Invoke-CommandWithDebug, Format-TimeSpan, Start-ParallelPortPing, Join-Array, Set-State, Send-Alert
+Function Start-Module {
+    <#
+    .SYNOPSIS 
+        .AUTHOR Alexk
+        .DATE 05.08.2020
+        .VER 1   
+    .DESCRIPTION
+     Install if not installed and start module.
+    .EXAMPLE
+    Start-Module  -Module $Module -Force -InstallScope AllUsers
+#>     
+    [CmdletBinding()]
+    Param (
+        [Parameter( Mandatory = $True, Position = 1, HelpMessage = "Module name.")]
+        [string] $Module,
+        [Parameter( Mandatory = $False, Position = 2, HelpMessage = "Force reload module.")]
+        [switch] $Force,
+        [Parameter( Mandatory = $False, Position = 3, HelpMessage = "Install scope.")]
+        [string] $InstallScope
+    )
+
+    if ($Force) {
+        $Res = Import-Module $Module -Force -PassThru
+    }
+    Else {
+        $Res = Import-Module $Module -PassThru
+    }
+
+    if ( -not $Res ) {
+        if ($InstallScope) {
+            Install-Module -Name $Module -Scope $InstallScope
+        }
+        Else {
+            Install-Module -Name $Module
+        }
+
+        if ($Force) {
+            $Res = Import-Module $Module -Force -PassThru
+        }
+        Else {
+            $Res = Import-Module $Module -PassThru
+        }
+
+        if (-not $res) {
+            Add-ToLog "Module [$Module] could not be loaded!" -Display -Status "error" -logFilePath $ScriptLogFilePath 
+            exit 1       
+        }    
+    }
+}
+
+Export-ModuleMember -Function Get-NewAESKey, Import-SettingsFromFile, Get-VarFromAESFile, Set-VarToAESFile, Disconnect-VPN, Connect-VPN, Add-ToLog, Restart-Switches, Restart-SwitchInInterval, Get-EventList, Send-Email, Start-PSScript, Restart-LocalHostInInterval, Show-Notification, Restart-ServiceInInterval, New-TelegramMessage, Get-SettingsFromFile, Get-HTMLTable, Get-HTMLCol, Get-ContentFromHTMLTemplate, Get-ErrorReporting, Get-CopyByBITS, Show-OpenDialog, Import-ModuleRemotely, Invoke-PSScriptBlock, Get-ACLArray, Set-PSModuleManifest, Get-VarToString, Get-UniqueArrayMembers, Resolve-IPtoFQDNinArray, Get-HelpersData, Get-DifferenceBetweenArrays, Test-Credentials, Convert-FSPath, Start-Program, Test-ElevatedRights, Invoke-CommandWithDebug, Format-TimeSpan, Start-ParallelPortPing, Join-Array, Set-State, Send-Alert, Start-Module
