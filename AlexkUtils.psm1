@@ -1,9 +1,9 @@
 ﻿function Get-NewAESKey {
     <#
     .SYNOPSIS 
-        .AUTHOR Alexk
-        .DATE 
-        .VER 1   
+        AUTHOR Alexk
+        DATE 
+        VER 1   
     .DESCRIPTION
      This function create a new AES key and save it to file
     .EXAMPLE
@@ -25,9 +25,9 @@ Function Import-SettingsFromFile {
     #Get-SettingsFromFile
 <#
     .SYNOPSIS 
-        .AUTHOR Alexk
-        .DATE 
-        .VER 1   
+        AUTHOR Alexk
+        DATE 
+        VER 1   
     .DESCRIPTION
      Function to import variables from XML file
     .EXAMPLE
@@ -50,9 +50,9 @@ Function Initialize-Vars {
 #ReplaceVars 
 <#
     .SYNOPSIS 
-        .AUTHOR Alexk
-        .DATE 
-        .VER 1   
+        AUTHOR Alexk
+        DATE 
+        VER 1   
     .DESCRIPTION
      Function to replace params with its value.
     .EXAMPLE
@@ -82,9 +82,9 @@ Function Get-VarFromAESFile  {
 #Get-VarFromFile  
     <#
     .SYNOPSIS 
-        .AUTHOR Alexk
-        .DATE 
-        .VER 1   
+        AUTHOR Alexk
+        DATE 
+        VER 1   
     .DESCRIPTION
      Function to read variable from file with decryption with AES key file
     .EXAMPLE
@@ -130,9 +130,9 @@ Function Set-VarToAESFile {
 #Set-VarToFile  
     <#
     .SYNOPSIS 
-        .AUTHOR Alexk
-        .DATE 
-        .VER 1   
+        AUTHOR Alexk
+        DATE 
+        VER 1   
     .DESCRIPTION
      Function to write variable to file with encryption with AES key file
     .EXAMPLE
@@ -158,9 +158,9 @@ Function Set-VarToAESFile {
 Function Get-VarToString {
 <#
     .SYNOPSIS 
-        .AUTHOR Alexk
-        .DATE 09.04.2020
-        .VER 1   
+        AUTHOR Alexk
+        DATE 09.04.2020
+        VER 1   
     .DESCRIPTION
      Function to make string from secure string.
     .EXAMPLE
@@ -184,9 +184,9 @@ Function Get-VarToString {
 Function Add-ToLog {
 <#
     .SYNOPSIS 
-        .AUTHOR Alexk
-        .DATE 
-        .VER 1   
+        AUTHOR Alexk
+        DATE 
+        VER 1   
     .DESCRIPTION
      Function to write message into a log file
     .EXAMPLE
@@ -207,7 +207,7 @@ Function Add-ToLog {
         [Parameter(Mandatory = $false, Position = 3, HelpMessage = "Display on the screen." )]
         [switch] $Display,
         [Parameter(Mandatory = $false, Position = 4, HelpMessage = "Message status." )]
-        [ValidateSet("Info", "Warning", "Error")]
+        [ValidateSet("Info", "Warning", "Error", "Group1", "Group2", "Group3")]
         [string] $Status,
         [Parameter(Mandatory = $false, Position = 5, HelpMessage = "Date format string." )]
         [string] $Format,
@@ -215,12 +215,12 @@ Function Add-ToLog {
         [int16] $Level
     )
     if (-not $Level) {
-        if($ParentLevel){
-            [int16] $Level = [int16] $ParentLevel + 1
+        if($Global:gsParentLevel){
+            [int16] $Level = [int16] $Global:gsParentLevel + 1
         }
     }
     
-    if($Global:ScriptLocalHost -ne "$($Env:COMPUTERNAME)"){
+    if($Global:gsScriptLocalHost -ne "$($Env:COMPUTERNAME)"){
         $Remote  = $true
         $Message = "Remote [$($Env:COMPUTERNAME)]. $Message"
         $Hash = @{
@@ -232,39 +232,39 @@ Function Add-ToLog {
             Format      = $Format
             Level       = $Level
         }
-        [array] $Global:LogBuffer += $Hash
+        [array] $Global:gsLogBuffer += $Hash
     }
 
     if($Format) {
         $Date = Get-Date -Format $Format
     }
     Else {
-        if ($Global:GlobalDateTimeFormat){
-            $Date = Get-Date -Format $Global:GlobalDateTimeFormat
+        if ($Global:gsGlobalDateTimeFormat){
+            $Date = Get-Date -Format $Global:gsGlobalDateTimeFormat
         }
         Else {
-            $Date = Get-Date 
+            $Date = Get-Date
         }
     }
-    
+
     [string]$LevelText = ""
     if ($Level){
         [string]$LevelSign       = " "
         [int16] $LevelMultiplier = 4
         for ($i = 0; $i -lt ($Level*$LevelMultiplier); $i++) {
             $LevelText += $LevelSign
-        }        
+        }
     }
-    
+
     $Text = ($Date.ToString()  + " $LevelText" + $Message)
-    # Write-host "Text = $Text"                 
+    # Write-host "Text = $Text"
     # Write-Host "Add-ToLog ParentLevel = $ParentLevel"
     # Write-Host "Add-ToLog Level = $Level"
     # Write-Host "Padding = $($LevelMultiplier)"
     if ( -not $remote){        
         # Because many process can write simultaneously.
-        if ( -not $ScriptOperationTry) {
-            $ScriptOperationTry = 10
+        if ( -not $Global:gsScriptOperationTry) {
+            $Global:gsScriptOperationTry = 10
         }
         for ($i = 1; $i -le $ScriptOperationTry; $i++) {
             try {
@@ -275,13 +275,13 @@ Function Add-ToLog {
                 "replace" {
                     Out-File -FilePath $logFilePath -Encoding utf8 -Force -InputObject $Text
                 }
-                    Default { }    
+                    Default { }
                 }
                 break
             }
             Catch {
-                if ($PauseBetweenRetries){
-                    Start-Sleep -Milliseconds $PauseBetweenRetries 
+                if ($Global:gsPauseBetweenRetries){
+                    Start-Sleep -Milliseconds $Global:gsPauseBetweenRetries 
                 }
                 Else {
                     Start-Sleep -Milliseconds 500
@@ -290,10 +290,10 @@ Function Add-ToLog {
         }      
     }
     If ($Display){
-        if ($logFilePath -ne $ScriptLogFilePath){
+        if ($logFilePath -ne $Global:gsScriptLogFilePath){
             $TextLen = $text.Length
-            if ($TextLen -le $LogFileNamePosition){
-                $text = $text.PadRight($LogFileNamePosition, " ")
+            if ($TextLen -le $Global:gsLogFileNamePosition){
+                $text = $text.PadRight($Global:gsLogFileNamePosition, " ")
                 $NewText = "$text[$(split-path -path $logFilePath -Leaf)]"
             } 
             Else {
@@ -304,21 +304,30 @@ Function Add-ToLog {
             $NewText = $text
         }
         if($status){ 
-            switch ($Status) {
-                "Info" { 
+            switch ( $Status.ToLower() ) {
+                "info" { 
                     Write-Host $NewText  -ForegroundColor Green
                  }
-                 "Warning" { 
+                 "warning" { 
                     Write-Host $NewText  -ForegroundColor Yellow
                  }
-                 "Error" { 
+                 "error" {
                     Write-Host $NewText  -ForegroundColor Red
+                 }
+                 "group1" {
+                    Write-Host $NewText  -ForegroundColor Blue
+                 }
+                 "group2" {
+                    Write-Host $NewText  -ForegroundColor Cyan
+                 }
+                 "group3" {
+                    Write-Host $NewText  -ForegroundColor Magenta
                  }
                 Default {}
             }
        }
        Else{
-            Write-Host $NewText 
+            Write-Host $NewText
        }
 
     }
@@ -326,9 +335,9 @@ Function Add-ToLog {
 function Disconnect-VPN {
     <#
     .SYNOPSIS 
-        .AUTHOR Alexk
-        .DATE 
-        .VER 1   
+        AUTHOR Alexk
+        DATE 
+        VER 1   
     .DESCRIPTION
      Function to break VPN connection
     .EXAMPLE
@@ -360,9 +369,9 @@ function Disconnect-VPN {
 Function Connect-VPN {
     <#
     .SYNOPSIS 
-        .AUTHOR Alexk
-        .DATE 
-        .VER 1   
+        AUTHOR Alexk
+        DATE 
+        VER 1   
     .DESCRIPTION
      Function to establish VPN connection
     .EXAMPLE
@@ -413,9 +422,9 @@ Function Restart-Switches {
 #RebootSwitches
     <#
     .SYNOPSIS 
-        .AUTHOR Alexk
-        .DATE 
-        .VER 1   
+        AUTHOR Alexk
+        DATE 
+        VER 1   
     .DESCRIPTION
      Function to reboot device
     .EXAMPLE
@@ -473,9 +482,9 @@ Function Restart-Switches {
 Function Get-EventList {
     <#
     .SYNOPSIS 
-        .AUTHOR Alexk
-        .DATE 
-        .VER 1   
+        AUTHOR Alexk
+        DATE 
+        VER 1   
     .DESCRIPTION
      Function to event list from log file in interval or not.
     .EXAMPLE
@@ -529,7 +538,7 @@ Function Get-EventList {
         }
     }
     Else {
-        Add-ToLog -Message "Log file [$LogFilePath] does not exist!" -logFilePath $ScriptLogFilePath -Status "Error" -Display -Level ($ParentLevel + 1)
+        Add-ToLog -Message "Log file [$LogFilePath] does not exist!" -logFilePath $Global:gsScriptLogFilePath -Status "Error" -Display -Level ($Global:gsParentLevel + 1)
     }
    
     return $Res
@@ -537,9 +546,9 @@ Function Get-EventList {
 Function Send-Email {
 <#
     .SYNOPSIS 
-        .AUTHOR Alexk
-        .DATE 
-        .VER 1   
+        AUTHOR Alexk
+        DATE 
+        VER 1   
     .DESCRIPTION
      Function to send email message
     .EXAMPLE
@@ -656,7 +665,7 @@ Function Send-Email {
         } 
     }
     
-    $EmailLogFilePath = "$($Global:ProjectRoot)\$($Global:LOGSFolder)\Email.log"
+    $EmailLogFilePath = "$($Global:ProjectRoot)\$($Global:gsLOGSFolder)\Email.log"
     #Start-Job -ScriptBlock $ScriptBlock -ArgumentList $SMTP, $emailMessage, $TTL, $PauseBetweenTries, $EmailLogFilePath  
     
     $Success  = $False
@@ -680,9 +689,9 @@ Function Start-PSScript {
 #StartPSScript
     <#
     .SYNOPSIS 
-        .AUTHOR Alexk
-        .DATE 
-        .VER 1   
+        AUTHOR Alexk
+        DATE 
+        VER 1   
     .DESCRIPTION
      Function to start powershell script or command.
     .EXAMPLE
@@ -761,7 +770,7 @@ Function Start-PSScript {
         #             $Res = Start-PSScript -ScriptBlock $ScriptBlock -logFilePath "%LogFilePath%" -DebugRun -Evaluate
         #             $Res
         #         }
-        #         $OutputXMLPath     = "$ProjectRoot\$DATAFolder\ScriptBlockOutput.xml"
+        #         $OutputXMLPath     = "$ProjectRoot\$($Global:gsDATAFolder)\ScriptBlockOutput.xml"
         #         [string]$End = {
         #             if($Res){
         #                 $Res | Export-Clixml -path "%OutputXMLPath%" -Encoding utf8 -Force 
@@ -771,7 +780,7 @@ Function Start-PSScript {
         #         $NestedScriptBlock = $NestedScriptBlock.Replace("%ScriptBlock%", $ScriptBlockNew)
         #         $NestedScriptBlock = $NestedScriptBlock.Replace("%LogFilePath%", $logFilePath)
         #         $NestedScriptBlock = $NestedScriptBlock.Replace("%OutputXMLPath%", $OutputXMLPath)
-        #         $NestedScriptBlock = $NestedScriptBlock.Replace("%DATAFolder%", $DATAFolder)
+        #         $NestedScriptBlock = $NestedScriptBlock.Replace("%DATAFolder%", $Global:gsDATAFolder)
         #         write-host $NestedScriptBlock
         #         [scriptblock]$NestedScriptBlock = [scriptblock]::Create($NestedScriptBlock)
         #         Start-PSScript -ScriptBlock $NestedScriptBlock -logFilePath $logFilePath -Credentials $Credentials -DebugRun
@@ -781,7 +790,7 @@ Function Start-PSScript {
         #             $ScriptBlock = { %ScriptBlock% }                    
         #             Start-PSScript -ScriptBlock $ScriptBlock -logFilePath "%LogFilePath%" -Evaluate
         #         }
-        #         $OutputXMLPath = "$ProjectRoot\$DATAFolder\ScriptBlockOutput.xml"
+        #         $OutputXMLPath = "$ProjectRoot\$($Global:gsDATAFolder)\ScriptBlockOutput.xml"
         #         [string]$End = {
         #             if ($Res) {
         #                 $Res | Export-Clixml -path "%OutputXMLPath%" -Encoding utf8 -Force 
@@ -791,7 +800,7 @@ Function Start-PSScript {
         #         $NestedScriptBlock = $NestedScriptBlock.Replace("%ScriptBlock%", $ScriptBlockNew)
         #         $NestedScriptBlock = $NestedScriptBlock.Replace("%LogFilePath%", $logFilePath)
         #         $NestedScriptBlock = $NestedScriptBlock.Replace("%OutputXMLPath%", $OutputXMLPath)
-        #         $NestedScriptBlock = $NestedScriptBlock.Replace("%DATAFolder%", $DATAFolder)
+        #         $NestedScriptBlock = $NestedScriptBlock.Replace("%DATAFolder%", $Global:gsDATAFolder)
         #         [scriptblock]$NestedScriptBlock = [scriptblock]::Create($NestedScriptBlock)               
                 
         #         Start-PSScript -ScriptBlock $NestedScriptBlock -logFilePath $logFilePath -Credentials $Credentials 
@@ -826,9 +835,9 @@ Function Start-PSScript {
 Function Start-Program {
     <#
     .SYNOPSIS 
-        .AUTHOR Alexk
-        .DATE 10.05.2020
-        .VER 1   
+        AUTHOR Alexk
+        DATE 10.05.2020
+        VER 1   
     .DESCRIPTION
      Function to start os executable file.
     .EXAMPLE
@@ -921,9 +930,9 @@ Function Restart-SwitchInInterval {
 #RebootSwitchesInInterval
 <#
     .SYNOPSIS 
-        .AUTHOR Alexk
-        .DATE 
-        .VER 1   
+        AUTHOR Alexk
+        DATE 
+        VER 1   
     .DESCRIPTION
      Function to restart devices in time interval.
     .EXAMPLE
@@ -987,9 +996,9 @@ Function Restart-LocalHostInInterval {
 #RestartLocalHostInInterval
 <#
     .SYNOPSIS 
-        .AUTHOR Alexk
-        .DATE 
-        .VER 1   
+        AUTHOR Alexk
+        DATE 
+        VER 1   
     .DESCRIPTION
      Function to restart computer in time interval.
     .EXAMPLE
@@ -1029,9 +1038,9 @@ Function Show-Notification {
 #ShowNotification
 <#
     .SYNOPSIS 
-        .AUTHOR Alexk
-        .DATE 
-        .VER 1   
+        AUTHOR Alexk
+        DATE 
+        VER 1   
     .DESCRIPTION
      Function to show notification in the system tray.
     .EXAMPLE
@@ -1091,9 +1100,9 @@ Function Restart-ServiceInInterval {
     #RestartServiceInInterval
     <#
     .SYNOPSIS 
-        .AUTHOR Alexk
-        .DATE 
-        .VER 1   
+        AUTHOR Alexk
+        DATE 
+        VER 1   
     .DESCRIPTION
      Function to create logger object.
     .EXAMPLE
@@ -1135,9 +1144,9 @@ Function Restart-ServiceInInterval {
 Function New-TelegramMessage {
     <#
     .SYNOPSIS 
-        .AUTHOR Alexk
-        .DATE 
-        .VER 1   
+        AUTHOR Alexk
+        DATE 
+        VER 1   
     .DESCRIPTION
      Function to send telegram message.
     .EXAMPLE
@@ -1177,7 +1186,7 @@ Function New-TelegramMessage {
         [System.Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
     }
     Catch { 
-        Add-ToLog -Message "Error while enabling TLS mode [Tls12]!" -Status "Error" -Display -logFilePath $ScriptLogFilePath
+        Add-ToLog -Message "Error while enabling TLS mode [Tls12]!" -Status "Error" -Display -logFilePath $Global:gsScriptLogFilePath
     }    
    
     $URI  = "https://api.telegram.org/bot" + (Get-VarToString $Token) + "/sendMessage?chat_id=" + (Get-VarToString $ChatID) + "&text=" + $Message
@@ -1225,7 +1234,7 @@ Function New-TelegramMessage {
         } 
     }
     
-    $TelegramLogFilePath = "$($Global:ProjectRoot)\$($Global:LOGSFolder)\Telegram.log"
+    $TelegramLogFilePath = "$($Global:ProjectRoot)\$($Global:gsLOGSFolder)\Telegram.log"
     Start-Job -ScriptBlock $ScriptBlock -ArgumentList $URI, $TTL, $PauseBetweenTries, $TelegramLogFilePath, $Message    
     #Send-Telegram $URI $TTL $PauseBetweenTries $TelegramLogFilePath $Message
 }
@@ -1233,9 +1242,9 @@ function Get-SettingsFromFile {
 #Get-Vars
     <#
     .SYNOPSIS 
-        .AUTHOR Alexk
-        .DATE 
-        .VER 1   
+        AUTHOR Alexk
+        DATE 
+        VER 1   
     .DESCRIPTION
      Load variables from external file.
     .EXAMPLE
@@ -1258,9 +1267,9 @@ function Get-SettingsFromFile {
 Function Get-HTMLTable {
     <#
     .SYNOPSIS 
-        .AUTHOR Alexk
-        .DATE 
-        .VER 1   
+        AUTHOR Alexk
+        DATE 
+        VER 1   
     .DESCRIPTION
      Create html table code.
     .EXAMPLE
@@ -1286,9 +1295,9 @@ function Get-HTMLRow {
     #Get-Row
 <#
     .SYNOPSIS 
-        .AUTHOR Alexk
-        .DATE 
-        .VER 1   
+        AUTHOR Alexk
+        DATE 
+        VER 1   
     .DESCRIPTION
      Create html table row code.
     .EXAMPLE
@@ -1331,9 +1340,9 @@ Function Get-HTMLCol  {
 #Get-Col    
     <#
     .SYNOPSIS 
-        .AUTHOR Alexk
-        .DATE 
-        .VER 1   
+        AUTHOR Alexk
+        DATE 
+        VER 1   
     .DESCRIPTION
      Create html table row code.
     .EXAMPLE
@@ -1369,9 +1378,9 @@ Function Get-HTMLCol  {
 Function Get-ContentFromHTMLTemplate {
     <#
     .SYNOPSIS 
-        .AUTHOR Alexk
-        .DATE 
-        .VER 1   
+        AUTHOR Alexk
+        DATE 
+        VER 1   
     .DESCRIPTION
      Create html file from template.
     .EXAMPLE
@@ -1417,9 +1426,9 @@ Function Get-ContentFromHTMLTemplate {
 function Get-ErrorReporting {
     <#
     .SYNOPSIS 
-        .AUTHOR Alexk
-        .DATE 
-        .VER 1   
+        AUTHOR Alexk
+        DATE 
+        VER 1   
     .DESCRIPTION
      Visualize errors and save it to file.
     .EXAMPLE
@@ -1487,9 +1496,9 @@ function Get-HTMLRowFullness {
 # Get-RowFullness    
     <#
     .SYNOPSIS 
-        .AUTHOR Alexk
-        .DATE 
-        .VER 1   
+        AUTHOR Alexk
+        DATE 
+        VER 1   
     .DESCRIPTION
      Return number of not empty columns.
     .EXAMPLE
@@ -1513,9 +1522,9 @@ function Get-HTMLRowFullness {
 function Get-CopyByBITS {
     <#
     .SYNOPSIS 
-        .AUTHOR Alexk
-        .DATE 
-        .VER 1   
+        AUTHOR Alexk
+        DATE 
+        VER 1   
     .DESCRIPTION
      Copy content of source path to destination path.
     .EXAMPLE
@@ -1703,9 +1712,9 @@ Function Show-CopyStatus {
     #Set-CopyStatus
     <#
     .SYNOPSIS 
-        .AUTHOR Alexk
-        .DATE 
-        .VER 1   
+        AUTHOR Alexk
+        DATE 
+        VER 1   
     .DESCRIPTION
      Show status of bits copy process.
     .EXAMPLE
@@ -1739,9 +1748,9 @@ Function Show-OpenDialog{
     #Get-OpenDialog
    <#
     .SYNOPSIS 
-        .AUTHOR Alexk
-        .DATE 
-        .VER 1   
+        AUTHOR Alexk
+        DATE 
+        VER 1   
     .DESCRIPTION
      Show windows open file dialog.
     .EXAMPLE
@@ -1789,9 +1798,9 @@ Function Show-OpenDialog{
 function Import-ModuleRemotely {
     <#
     .SYNOPSIS 
-        .AUTHOR Alexk
-        .DATE 
-        .VER 1   
+        AUTHOR Alexk
+        DATE 
+        VER 1   
     .DESCRIPTION
      Import powershell module to the remote session.
     .EXAMPLE
@@ -1824,12 +1833,12 @@ function Import-ModuleRemotely {
         $Modules           = $using:ModuleList
         #[string]   $Definition        = $using:Module.Definition
         ##### Init remote variables
-        [string]   $ScriptLocalHost            = $using:ScriptLocalHost
-        [array]    $Global:LogBuffer           = @()
-        [string]   $Global:ScriptLogFilePath   = $using:ScriptLogFilePath
-        [string]   $Global:ParentLevel         = $using:ParentLevel
-        [string]   $Global:LogFileNamePosition = $using:LogFileNamePosition
-        $Global:RunningCredentials             = [System.Security.Principal.WindowsIdentity]::GetCurrent()
+        [string]   $Global:gsScriptLocalHost            = $using:ScriptLocalHost
+        [array]    $Global:gsLogBuffer           = @()
+        [string]   $Global:gsScriptLogFilePath   = $using:ScriptLogFilePath
+        [string]   $Global:gsParentLevel         = $using:ParentLevel
+        [string]   $Global:gsLogFileNamePosition = $using:LogFileNamePosition
+        $Global:gsRunningCredentials             = [System.Security.Principal.WindowsIdentity]::GetCurrent()
         
         foreach ($Module in $Modules){
             $ScriptBlock     = {
@@ -1844,7 +1853,7 @@ function Import-ModuleRemotely {
                 $Res = New-Module -Name $ModuleName -ScriptBlock $SB | Import-Module -Force -PassThru  
                 
                 if ($Res) {
-                    Write-Host "Imported module [$ModuleName] in remote session."
+                    #Write-Host "Imported module [$ModuleName] in remote session."
                     #Write-Host "$(Get-Module $ModuleName | Select-Object -ExpandProperty ExportedCommands | Out-String)"
                 }
             }
@@ -1858,9 +1867,9 @@ function Import-ModuleRemotely {
 function Invoke-PSScriptBlock {
     <#
     .SYNOPSIS 
-        .AUTHOR Alex
-        .DATE   08.04.2020
-        .VER    1
+        AUTHOR Alex
+        DATE   08.04.2020
+        VER    1
     .DESCRIPTION
         Function to automate remote PS session or execute scripts locally
     .EXAMPLE
@@ -1973,9 +1982,9 @@ function Invoke-PSScriptBlock {
 function Get-ACLArray {
     <#
     .SYNOPSIS 
-        .AUTHOR Alex
-        .DATE   08.04.2020
-        .VER    1
+        AUTHOR Alex
+        DATE   08.04.2020
+        VER    1
     .DESCRIPTION
         Function return Array of ACL for all objects in the Path
         Use Type to filter item. "file", "folder", "all"
@@ -2059,9 +2068,9 @@ function Get-ACLArray {
 Function Set-PSModuleManifest {
     <#
     .SYNOPSIS 
-        .AUTHOR Alex
-        .DATE   08.04.2020
-        .VER    1
+        AUTHOR Alex
+        DATE   08.04.2020
+        VER    1
     .DESCRIPTION
         Function return Array of ACL for all objects in the Path
         Use Type to filter item. "file", "folder", "all"
@@ -2098,9 +2107,9 @@ Function Set-PSModuleManifest {
 function Get-UniqueArrayMembers {
     <#
     .SYNOPSIS 
-        .AUTHOR Alexk
-        .DATE 10.04.2020
-        .VER 1   
+        AUTHOR Alexk
+        DATE 10.04.2020
+        VER 1   
     .DESCRIPTION
      Return row with unique elements in column.
     .EXAMPLE
@@ -2127,9 +2136,9 @@ function Get-UniqueArrayMembers {
 function Resolve-IPtoFQDNinArray {
     <#
     .SYNOPSIS 
-        .AUTHOR Alexk
-        .DATE 10.04.2020
-        .VER 1   
+        AUTHOR Alexk
+        DATE 10.04.2020
+        VER 1   
     .DESCRIPTION
      Add FQDN column to IP array.
     .EXAMPLE
@@ -2179,9 +2188,9 @@ function Resolve-IPtoFQDNinArray {
 Function Get-HelpersData {
     <#
     .SYNOPSIS 
-        .AUTHOR Alex
-        .DATE   11.04.2020
-        .VER    1
+        AUTHOR Alex
+        DATE   11.04.2020
+        VER    1
     .DESCRIPTION
         Function return row in array from helpers CSV
     .EXAMPLE
@@ -2219,9 +2228,9 @@ Function Get-HelpersData {
 Function Get-DifferenceBetweenArrays {
     <#
     .SYNOPSIS 
-        .AUTHOR Alexk
-        .DATE 14.04.2020
-        .VER 1   
+        AUTHOR Alexk
+        DATE 14.04.2020
+        VER 1   
     .DESCRIPTION
      First and second arrays should be the same structure.
      Return array with objects absent in first array.
@@ -2307,9 +2316,9 @@ Function Get-DifferenceBetweenArrays {
 function Test-Credentials {
      <#
     .SYNOPSIS 
-        .AUTHOR Open source
-        .DATE 16.04.2020
-        .VER 1   
+        AUTHOR Open source
+        DATE 16.04.2020
+        VER 1   
     .DESCRIPTION
      Test user credentials.
     .EXAMPLE
@@ -2362,9 +2371,9 @@ function Test-Credentials {
 Function Convert-FSPath {
     <#
     .SYNOPSIS 
-        .AUTHOR Alexk
-        .DATE 29.04.2020
-        .VER 1   
+        AUTHOR Alexk
+        DATE 29.04.2020
+        VER 1   
     .DESCRIPTION
      Function to convert path from UNC to local or from local to UNC.
     .EXAMPLE
@@ -2400,9 +2409,9 @@ Function Convert-FSPath {
 Function Invoke-CommandWithDebug {
     <#
     .SYNOPSIS 
-        .AUTHOR Alexk
-        .DATE 05.05.2020
-        .VER 1   
+        AUTHOR Alexk
+        DATE 05.05.2020
+        VER 1   
     .DESCRIPTION
      Function to invoke command or script with debug info.
     .EXAMPLE
@@ -2424,10 +2433,10 @@ Function Invoke-CommandWithDebug {
 
     $StartTime = Get-Date
     if ($ScriptPath){
-        $Res = Start-PSScript -ScriptPath $ScriptPath -Arguments $Arguments -logFilePath $ScriptLogFilePath  -Wait
+        $Res = Start-PSScript -ScriptPath $ScriptPath -Arguments $Arguments -logFilePath $Global:gsScriptLogFilePath  -Wait
     }
     ElseIf ($ScriptBlock) {
-        $Res = Start-PSScript -ScriptBlock $ScriptBlock -Arguments $Arguments -logFilePath $ScriptLogFilePath  -wait
+        $Res = Start-PSScript -ScriptBlock $ScriptBlock -Arguments $Arguments -logFilePath $Global:gsScriptLogFilePath  -wait
     }
     $EndTime   = Get-Date
 
@@ -2445,7 +2454,7 @@ Function Invoke-CommandWithDebug {
         }  
     }
     Else {
-        Add-ToLog -Message "Need admin rights! Invoke-CommandWithDebug Aborted." -logFilePath $ScriptLogFilePath -Display -Status "Error" -Level ($ParentLevel + 1)
+        Add-ToLog -Message "Need admin rights! Invoke-CommandWithDebug Aborted." -logFilePath $Global:gsScriptLogFilePath -Display -Status "Error" -Level ($Global:gsParentLevel + 1)
     }
 
     Return $EventArray
@@ -2462,13 +2471,13 @@ function Test-ElevatedRights {
 Function Format-TimeSpan {
     <#
     .SYNOPSIS 
-        .AUTHOR Alexk
-        .DATE 21.06.2020
-        .VER 1   
+        AUTHOR Alexk
+        DATE 21.06.2020
+        VER 1   
     .DESCRIPTION
      Function to set time span presentation.
     .EXAMPLE
-    Format-TimeSpan -EventLogScriptPath "d:\test\events.ps1" -ScriptPath $ScriptPath 
+    Format-TimeSpan -TimeSpan $TimeSpan
 #>  
     [CmdletBinding()]
     param
@@ -2531,9 +2540,9 @@ Function Format-TimeSpan {
 Function Start-ParallelPortPing {
 <#
     .SYNOPSIS 
-        .AUTHOR Alexk
-        .DATE 23.06.2020
-        .VER 1   
+        AUTHOR Alexk
+        DATE 23.06.2020
+        VER 1   
     .DESCRIPTION
         Function to start parallel host ping with port.
         We can use port in host name.
@@ -2600,9 +2609,9 @@ Function Start-ParallelPortPing {
 Function Join-Array {
     <#
     .SYNOPSIS 
-        .AUTHOR Alexk
-        .DATE 23.06.2020
-        .VER 1   
+        AUTHOR Alexk
+        DATE 23.06.2020
+        VER 1   
     .DESCRIPTION
         Function to union two array by key argument.
     .EXAMPLE
@@ -2659,9 +2668,9 @@ Function Join-Array {
 Function Set-State {
     <#
     .SYNOPSIS 
-        .AUTHOR Alexk
-        .DATE 05.08.2020
-        .VER 1   
+        AUTHOR Alexk
+        DATE 05.08.2020
+        VER 1   
     .DESCRIPTION
      Save object state to file
     .EXAMPLE
@@ -2708,10 +2717,10 @@ Global state: $($StateObject.GlobalState)
                 "telegram" {  
                     if ($Global:TelegramParameters) {
                         Send-Alert -AlertParameters $Global:TelegramParameters -AlertMessage $AlertMessage
-                        Add-ToLog -Message "Sent telegram message." -logFilePath $ScriptLogFilePath -Display -Status "Info" 
+                        Add-ToLog -Message "Sent telegram message." -logFilePath $Global:gsScriptLogFilePath -Display -Status "Info" 
                     }
                     Else {
-                        Add-ToLog -Message "Telegram parameters not set! Plugin not available" -logFilePath $ScriptLogFilePath -Display -Status "Error" 
+                        Add-ToLog -Message "Telegram parameters not set! Plugin not available" -logFilePath $Global:gsScriptLogFilePath -Display -Status "Error" 
                     }
                 }
                 Default {}
@@ -2725,7 +2734,7 @@ Global state: $($StateObject.GlobalState)
                     Send-Alert -AlertParameters $Global:TelegramParameters -AlertMessage $AlertMessage
                 }
                 Else {
-                    Add-ToLog -Message "Telegram parameters not set! Plugin not available" -logFilePath $ScriptLogFilePath -Display -Status "Error"
+                    Add-ToLog -Message "Telegram parameters not set! Plugin not available" -logFilePath $Global:gsScriptLogFilePath -Display -Status "Error"
                 }
             }
             Default {}
@@ -2756,9 +2765,9 @@ Global state: $($StateObject.GlobalState)
 Function Send-Alert {
     <#
     .SYNOPSIS 
-        .AUTHOR Alexk
-        .DATE 05.08.2020
-        .VER 1   
+        AUTHOR Alexk
+        DATE 05.08.2020
+        VER 1   
     .DESCRIPTION
      Send alert by custom transport.
     .EXAMPLE
@@ -2790,9 +2799,9 @@ Function Send-Alert {
 Function Start-Module {
     <#
     .SYNOPSIS 
-        .AUTHOR Alexk
-        .DATE 05.08.2020
-        .VER 1   
+        AUTHOR Alexk
+        DATE 05.08.2020
+        VER 1   
     .DESCRIPTION
      Install if not installed and start module.
     .EXAMPLE
@@ -2831,10 +2840,49 @@ Function Start-Module {
         }
 
         if (-not $res) {
-            Add-ToLog "Module [$Module] could not be loaded!" -Display -Status "error" -logFilePath $ScriptLogFilePath 
+            Add-ToLog "Module [$Module] could not be loaded!" -Display -Status "error" -logFilePath $Global:gsScriptLogFilePath 
             exit 1       
         }    
     }
 }
+Function Convert-SpecialCharacters {
+    <#
+    .SYNOPSIS 
+        AUTHOR Alexk
+        DATE 29.09.2020
+        VER 1   
+    .DESCRIPTION
+     Replace special characters in string.
+    .EXAMPLE
+    Convert-SpecialCharacters -String $String
+#>     
+    [OutputType([String])] 
+    [CmdletBinding()]
+    Param (
+        [Parameter( Mandatory = $True, Position = 0, HelpMessage = "String.")]
+        [string] $String,
+        [Parameter( Mandatory = $False, Position = 1, HelpMessage = "Special characters list.")]
+        [string] $Mode = "wildcard"
+    )
 
-Export-ModuleMember -Function Get-NewAESKey, Import-SettingsFromFile, Get-VarFromAESFile, Set-VarToAESFile, Disconnect-VPN, Connect-VPN, Add-ToLog, Restart-Switches, Restart-SwitchInInterval, Get-EventList, Send-Email, Start-PSScript, Restart-LocalHostInInterval, Show-Notification, Restart-ServiceInInterval, New-TelegramMessage, Get-SettingsFromFile, Get-HTMLTable, Get-HTMLCol, Get-ContentFromHTMLTemplate, Get-ErrorReporting, Get-CopyByBITS, Show-OpenDialog, Import-ModuleRemotely, Invoke-PSScriptBlock, Get-ACLArray, Set-PSModuleManifest, Get-VarToString, Get-UniqueArrayMembers, Resolve-IPtoFQDNinArray, Get-HelpersData, Get-DifferenceBetweenArrays, Test-Credentials, Convert-FSPath, Start-Program, Test-ElevatedRights, Invoke-CommandWithDebug, Format-TimeSpan, Start-ParallelPortPing, Join-Array, Set-State, Send-Alert, Start-Module
+    switch ( $Mode.ToLower() ) {
+        "wildcard" { 
+            [array] $SpecialCharacters = "[","]", "*", "?" 
+        }
+        Default {}
+    }
+    
+    $StringArray = $String.ToCharArray()
+    [string] $Res = ""
+    foreach ( $Char in $StringArray ){
+        if ( $Char -in $SpecialCharacters ) {
+            $Res += "``$Char"
+        }
+        Else {
+            $Res += $Char
+        }
+    }
+    return [string]$res
+}
+
+Export-ModuleMember -Function Get-NewAESKey, Import-SettingsFromFile, Get-VarFromAESFile, Set-VarToAESFile, Disconnect-VPN, Connect-VPN, Add-ToLog, Restart-Switches, Restart-SwitchInInterval, Get-EventList, Send-Email, Start-PSScript, Restart-LocalHostInInterval, Show-Notification, Restart-ServiceInInterval, New-TelegramMessage, Get-SettingsFromFile, Get-HTMLTable, Get-HTMLCol, Get-ContentFromHTMLTemplate, Get-ErrorReporting, Get-CopyByBITS, Show-OpenDialog, Import-ModuleRemotely, Invoke-PSScriptBlock, Get-ACLArray, Set-PSModuleManifest, Get-VarToString, Get-UniqueArrayMembers, Resolve-IPtoFQDNinArray, Get-HelpersData, Get-DifferenceBetweenArrays, Test-Credentials, Convert-FSPath, Start-Program, Test-ElevatedRights, Invoke-CommandWithDebug, Format-TimeSpan, Start-ParallelPortPing, Join-Array, Set-State, Send-Alert, Start-Module, Convert-SpecialCharacters
