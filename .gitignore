@@ -1,1 +1,7 @@
 .vscode/settings.json
+ACL/*
+SETTINGS/Settings.ps1
+LOGS/*
+VALUES/*
+TESTS/SETTINGS/*
+TESTS/LOGS/*
