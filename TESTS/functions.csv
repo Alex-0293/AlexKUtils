@@ -1,105 +1,101 @@
 "ParentFunctionName";"FunctionName";"Description"
-"";"Test-ElevatedRights";""
+"";"Get-NewAESKey";"This function create a new AES key and save it to file
+"
+"";"Get-VarFromAESFile";"Function to read variable from file encrypted with AES key.
+"
+"";"Set-VarToAESFile";"Function to write variable to file with encryption with AES key file
+"
+"";"Get-VarToString";"Function to make string from secure string.
+"
+"";"Connect-VPN";"Function to establish VPN connection
+"
+"";"Disconnect-VPN";"Function to break VPN connection
+"
+"";"Restart-LocalHostInInterval";"Function to restart computer in time interval based on last restart.
+"
+"";"Restart-Switches";"Function to reboot device
+"
+"";"Restart-SwitchInInterval";"Function to restart devices in time interval.
+"
+"";"Restart-ServiceInInterval";"Function to create logger object.
+"
 "";"Test-Credentials";"Test user credentials.
+"
+"";"Test-ElevatedRights";""
+"";"Add-ToLog";"Function to write message into a log file
+"
+"";"Send-Alert";"Send alert by custom transport.
+"
+"";"Set-State";"Save object state to file
+"
+"";"Send-Email";"Function to send email message
+"
+"";"New-TelegramMessage";"Function to send telegram message.
+"
+"";"Get-HTMLTable";"Create html table code.
+"
+"";"Get-HTMLRow";"Create html table row code.
+"
+"Get-HTMLRow";"Get-HTMLRowFullness";"Return number of not empty columns.
+"
+"";"Get-HTMLCol";"Create html table row code.
+"
+"";"Get-ContentFromHTMLTemplate";"Create html file from template.
+"
+"";"Get-UniqueArrayMembers";"Return row with unique elements in column.
+"
+"";"Get-DifferenceBetweenArrays";"First and second arrays should be the same structure.
+Return array with objects absent in first array.
+"
+"";"Join-Array";"Function to union two array by key argument.
 "
 "";"Start-PSScript";"Function to start powershell script or command.
 "
+"";"Import-ModuleRemotely";"Import powershell module to the remote session.
+"
+"";"Invoke-PSScriptBlock";"Function to automate remote PS session or execute scripts locally
+"
 "";"Start-Program";"Function to start os executable file.
+"
+"";"Start-Module";"Install if not installed and start module.
+"
+"";"Invoke-CommandWithDebug";"Function to invoke command or script with debug info.
+"
+"";"Convert-SpecialCharacters";"Replace special characters in string.
+"
+"";"Convert-StringToDigitArray";"Convert string to array of digit.
+"
+"";"Invoke-TrailerIncrease";""
+"";"Format-TimeSpan";"Function to set time span presentation.
 "
 "";"Start-ParallelPortPing";"Function to start parallel host ping with port.
 We can use port in host name.
 "
-"";"Start-Module";"Install if not installed and start module.
+"";"Convert-FSPath";"Function to convert path from UNC to local or from local to UNC.
+"
+"";"Get-ListByGroups";"Create console menu columned by data groups. Add digits for selection.
+"
+"";"Get-EventList";"Function to event list from log file in interval or not.
+"
+"";"Get-HelpersData";"Function return row in array from helpers CSV
+"
+"";"Get-CopyByBITS";"Copy content of source path to destination path.
+"
+"Get-CopyByBITS";"Show-CopyStatus";"Show status of bits copy process.
+"
+"";"Get-ACLArray";"Function return Array of ACL for all objects in the Path
+Use Type to filter item. ""file"", ""folder"", ""all""
+"
+"";"Resolve-IPtoFQDNinArray";"Add FQDN column to IP array.
+"
+"";"Split-Words";"Split words by capital letter.
+
 "
 "";"Show-OpenDialog";"Show windows open file dialog.
 "
 "";"Show-Notification";"Function to show notification in the system tray.
 "
-"";"Show-CopyStatus";"Show status of bits copy process.
-"
-"";"Set-VarToAESFile";"Function to write variable to file with encryption with AES key file
-"
-"";"Set-State";"Save object state to file
-"
-"";"Set-PSModuleManifest";"Function return Array of ACL for all objects in the Path
-Use Type to filter item. ""file"", ""folder"", ""all""
-"
-"";"Send-Email";"Function to send email message
-"
-"";"Send-Alert";"Send alert by custom transport.
-"
-"";"Restart-SwitchInInterval";"Function to restart devices in time interval.
-"
-"";"Restart-Switches";"Function to reboot device
-"
-"";"Restart-ServiceInInterval";"Function to create logger object.
-"
-"";"Restart-LocalHostInInterval";"Function to restart computer in time interval.
-"
-"";"Resolve-IPtoFQDNinArray";"Add FQDN column to IP array.
-"
-"";"New-TelegramMessage";"Function to send telegram message.
-"
-"";"Join-Array";"Function to union two array by key argument.
-"
-"";"Invoke-TrailerIncrease";""
-"";"Invoke-PSScriptBlock";"Function to automate remote PS session or execute scripts locally
-"
-"";"Invoke-CommandWithDebug";"Function to invoke command or script with debug info.
-"
-"";"Initialize-Vars";"Function to replace params with its value.
-"
-"";"Import-SettingsFromFile";"Function to import variables from XML file
-"
-"";"Import-ModuleRemotely";"Import powershell module to the remote session.
-"
-"";"Get-VarToString";"Function to make string from secure string.
-"
-"";"Get-VarFromAESFile";"Function to read variable from file with decryption with AES key file
-"
-"";"Get-UniqueArrayMembers";"Return row with unique elements in column.
-"
 "";"Get-SettingsFromFile";"Load variables from external file.
 "
-"";"Get-NewAESKey";"This function create a new AES key and save it to file
-"
-"";"Get-ListByGroups";"Create console menu columned by data groups. Add digits for selection.
-"
-"";"Get-HTMLTable";"Create html table code.
-"
-"";"Get-HTMLRowFullness";"Return number of not empty columns.
-"
-"";"Get-HTMLRow";"Create html table row code.
-"
-"";"Get-HTMLCol";"Create html table row code.
-"
-"";"Get-HelpersData";"Function return row in array from helpers CSV
-"
-"";"Get-EventList";"Function to event list from log file in interval or not.
-"
 "";"Get-ErrorReporting";"Visualize errors and save it to file.
-"
-"";"Get-DifferenceBetweenArrays";"First and second arrays should be the same structure.
-Return array with objects absent in first array.
-"
-"";"Get-CopyByBITS";"Copy content of source path to destination path.
-"
-"";"Get-ContentFromHTMLTemplate";"Create html file from template.
-"
-"";"Get-ACLArray";"Function return Array of ACL for all objects in the Path
-Use Type to filter item. ""file"", ""folder"", ""all""
-"
-"";"Format-TimeSpan";"Function to set time span presentation.
-"
-"";"Disconnect-VPN";"Function to break VPN connection
-"
-"";"Convert-StringToDigitArray";"Convert string to array of digit.
-"
-"";"Convert-SpecialCharacters";"Replace special characters in string.
-"
-"";"Convert-FSPath";"Function to convert path from UNC to local or from local to UNC.
-"
-"";"Connect-VPN";"Function to establish VPN connection
-"
-"";"Add-ToLog";"Function to write message into a log file
 "

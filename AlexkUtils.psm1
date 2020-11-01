@@ -1,4 +1,4 @@
-﻿<#
+<#
     .SYNOPSIS
         AlexK utility module.
     .DESCRIPTION
@@ -19,13 +19,11 @@
 function Get-NewAESKey {
 <#
     .SYNOPSIS
-        AUTHOR Alexk
-        DATE   25.10.20
-        VER    1
+        Get new AES key
     .DESCRIPTION
         This function create a new AES key and save it to file
     .EXAMPLE
-        Get-NewAESKey -AESKeyFilePath $AESKeyFilePath
+        Get-NewAESKey [-AESKeyFilePath $AESKeyFilePath] [-PassThru $PassThru]
 #>
     [OutputType([Byte[]])]
     [CmdletBinding()]
@@ -50,9 +48,7 @@ function Get-NewAESKey {
 Function Get-VarFromAESFile  {
 <#
     .SYNOPSIS
-        AUTHOR Alexk
-        DATE   25.10.20
-        VER    1
+        Get var from AES file
     .DESCRIPTION
         Function to read variable from file encrypted with AES key.
     .EXAMPLE
@@ -102,13 +98,11 @@ Function Get-VarFromAESFile  {
 Function Set-VarToAESFile {
 <#
     .SYNOPSIS
-        AUTHOR Alexk
-        DATE   25.10.20
-        VER    1
+        Set var to AES file
     .DESCRIPTION
         Function to write variable to file with encryption with AES key file
     .EXAMPLE
-        Set-VarToAESFile -Var $Var -AESKeyFilePath $AESKeyFilePath -VarFilePath $VarFilePath
+        Set-VarToAESFile -Var $Var -AESKeyFilePath $AESKeyFilePath -VarFilePath $VarFilePath [-PassThru $PassThru]
 #>
     [CmdletBinding()]
     param
@@ -126,7 +120,7 @@ Function Set-VarToAESFile {
         [switch] $PassThru
     )
 
-    $AESData = ConvertTo-SecureString -String $Var -AsPlainText | ConvertFrom-SecureString -Key (get-content $AESKeyFilePath) 
+    $AESData = ConvertTo-SecureString -String $Var -AsPlainText | ConvertFrom-SecureString -Key (get-content $AESKeyFilePath)
     $AESData | Set-Content -path $VarFilePath
 
     if ( $PassThru ){
@@ -136,9 +130,7 @@ Function Set-VarToAESFile {
 Function Get-VarToString {
 <#
     .SYNOPSIS
-        AUTHOR Alexk
-        DATE   09.04.20
-        VER    1
+        Get var to string
     .DESCRIPTION
         Function to make string from secure string.
     .EXAMPLE
@@ -165,9 +157,7 @@ Function Get-VarToString {
 Function Connect-VPN {
 <#
     .SYNOPSIS
-        AUTHOR Alexk
-        DATE   25.10.20
-        VER    1
+        Connect VPN
     .DESCRIPTION
         Function to establish VPN connection
     .EXAMPLE
@@ -224,9 +214,7 @@ Function Connect-VPN {
 function Disconnect-VPN {
 <#
     .SYNOPSIS
-        AUTHOR Alexk
-        DATE   25.10.20
-        VER    1
+        Disconnect VPN
     .DESCRIPTION
         Function to break VPN connection
     .EXAMPLE
@@ -261,13 +249,11 @@ function Disconnect-VPN {
 Function Restart-LocalHostInInterval {
 <#
     .SYNOPSIS
-        AUTHOR Alexk
-        DATE   25.10.20
-        VER    1
+        Restart local host in interval
     .DESCRIPTION
         Function to restart computer in time interval based on last restart.
     .EXAMPLE
-        Restart-LocalHostInInterval -LogFilePath $LogFilePath [-MinIntervalBetweenReboots $MinIntervalBetweenReboots]
+        Restart-LocalHostInInterval -LogFilePath $LogFilePath [-MinIntervalBetweenReboots $MinIntervalBetweenReboots] [-PassThru $PassThru]
 #>
     [CmdletBinding()]
     param (
@@ -315,16 +301,14 @@ Function Restart-LocalHostInInterval {
 Function Restart-Switches {
 <#
     .SYNOPSIS
-        AUTHOR Alexk
-        DATE   25.10.20
-        VER    1
+        Restart switches
     .DESCRIPTION
         Function to reboot device
     .EXAMPLE
         Parameter set: "Login"
-            Restart-Switches -SwitchesIP $SwitchesIP -logFilePath $logFilePath -PLinkPath $PLinkPath -SshConString $SshConString -SshCommand $SshCommand [-Login $Login] [-Password $Password]
+        Restart-Switches -SwitchesIP $SwitchesIP -logFilePath $logFilePath -PLinkPath $PLinkPath -SshConString $SshConString -SshCommand $SshCommand [-Login $Login] [-Password $Password]
         Parameter set: "Cert"
-            Restart-Switches -SwitchesIP $SwitchesIP -logFilePath $logFilePath -PLinkPath $PLinkPath -SshConString $SshConString -SshCommand $SshCommand [-CertFilePath $CertFilePath]
+        Restart-Switches -SwitchesIP $SwitchesIP -logFilePath $logFilePath -PLinkPath $PLinkPath -SshConString $SshConString -SshCommand $SshCommand [-CertFilePath $CertFilePath]
 #>
     [CmdletBinding()]
     Param
@@ -378,16 +362,14 @@ Function Restart-Switches {
 Function Restart-SwitchInInterval {
 <#
     .SYNOPSIS
-        AUTHOR Alexk
-        DATE   25.10.20
-        VER    1
+        Restart switch in interval
     .DESCRIPTION
         Function to restart devices in time interval.
     .EXAMPLE
         Parameter set: "Login"
-            Restart-SwitchInInterval -SwitchesIP $SwitchesIP -logFilePath $logFilePath -PLinkPath $PLinkPath -SshConString $SshConString -SshCommand $SshCommand [-Login $Login] [-Password $Password] [-MinIntervalBetweenReboots $MinIntervalBetweenReboots]
+        Restart-SwitchInInterval -SwitchesIP $SwitchesIP -logFilePath $logFilePath -PLinkPath $PLinkPath -SshConString $SshConString -SshCommand $SshCommand [-Login $Login] [-Password $Password] [-MinIntervalBetweenReboots $MinIntervalBetweenReboots]
         Parameter set: "Cert"
-            Restart-SwitchInInterval -SwitchesIP $SwitchesIP -logFilePath $logFilePath -PLinkPath $PLinkPath -SshConString $SshConString -SshCommand $SshCommand [-CertFilePath $CertFilePath] [-MinIntervalBetweenReboots $MinIntervalBetweenReboots]
+        Restart-SwitchInInterval -SwitchesIP $SwitchesIP -logFilePath $logFilePath -PLinkPath $PLinkPath -SshConString $SshConString -SshCommand $SshCommand [-CertFilePath $CertFilePath] [-MinIntervalBetweenReboots $MinIntervalBetweenReboots]
 #>
     [CmdletBinding()]
     param (
@@ -446,9 +428,7 @@ Function Restart-SwitchInInterval {
 Function Restart-ServiceInInterval {
 <#
     .SYNOPSIS
-        AUTHOR Alexk
-        DATE   25.10.20
-        VER    1
+        Restart service in interval
     .DESCRIPTION
         Function to create logger object.
     .EXAMPLE
@@ -492,9 +472,7 @@ Function Restart-ServiceInInterval {
 function Test-Credentials {
 <#
     .SYNOPSIS
-        AUTHOR Open source
-        DATE   16.04.20
-        VER    1
+        Test credentials
     .DESCRIPTION
         Test user credentials.
     .EXAMPLE
@@ -548,12 +526,9 @@ function Test-Credentials {
 function Test-ElevatedRights {
 <#
     .SYNOPSIS
-        AUTHOR Alexk
-        DATE   25.10.20
-        VER    1
-    .DESCRIPTION
+        Test elevated rights
     .EXAMPLE
-        Test-ElevatedRights
+        Test-ElevatedRights [-Identity $Identity=[Security.Principal.WindowsIdentity]::GetCurrent()]
 #>
     [CmdletBinding()]
     [OutputType([Bool])]
@@ -563,7 +538,7 @@ function Test-ElevatedRights {
         [Security.Principal.WindowsIdentity]
         $Identity = [Security.Principal.WindowsIdentity]::GetCurrent()
     )
-    
+
     $Principal = New-Object Security.Principal.WindowsPrincipal -ArgumentList $Identity
     $Res       = $principal.IsInRole( [Security.Principal.WindowsBuiltInRole]::Administrator )
 
@@ -574,9 +549,7 @@ function Test-ElevatedRights {
 Function Add-ToLog {
 <#
     .SYNOPSIS
-        AUTHOR Alexk
-        DATE   25.10.20
-        VER    1
+        Add to log
     .DESCRIPTION
         Function to write message into a log file
     .EXAMPLE
@@ -727,9 +700,7 @@ Function Add-ToLog {
 Function Send-Alert {
 <#
     .SYNOPSIS
-        AUTHOR Alexk
-        DATE   05.08.20
-        VER    1
+        Send alert
     .DESCRIPTION
         Send alert by custom transport.
     .EXAMPLE
@@ -760,9 +731,7 @@ Function Send-Alert {
 Function Set-State {
 <#
     .SYNOPSIS
-        AUTHOR Alexk
-        DATE   05.08.20
-        VER    1
+        Set state
     .DESCRIPTION
         Save object state to file
     .EXAMPLE
@@ -857,14 +826,12 @@ Global state: $($StateObject.GlobalState)
 Function Send-Email {
 <#
     .SYNOPSIS
-        AUTHOR Alexk
-        DATE   25.10.20
-        VER    1
+        Send email
     .DESCRIPTION
         Function to send email message
     .EXAMPLE
         Parameter set: "Auth"
-            Send-Email -SmtpServer $SmtpServer -From $From -To $To [-Subject $Subject] [-Body $Body] [-HtmlBody $HtmlBody] [-User $User] [-Password $Password] [-Port $Port=25] [-SSL $SSL] [-Attachment $Attachment] [-AttachmentContentId $AttachmentContentId] [-TTL $TTL=(New-TimeSpan -days 1)] [-PauseBetweenTries $PauseBetweenTries=30]
+        Send-Email -SmtpServer $SmtpServer -From $From -To $To [-Subject $Subject] [-Body $Body] [-HtmlBody $HtmlBody] [-User $User] [-Password $Password] [-Port $Port=25] [-SSL $SSL] [-Attachment $Attachment] [-AttachmentContentId $AttachmentContentId] [-TTL $TTL=(New-TimeSpan -days 1)] [-PauseBetweenTries $PauseBetweenTries=30]
 #>
     [CmdletBinding()]
     param (
@@ -1001,14 +968,12 @@ Function Send-Email {
 Function New-TelegramMessage {
 <#
     .SYNOPSIS
-        AUTHOR Alexk
-        DATE   25.10.20
-        VER    1
+        New telegram message
     .DESCRIPTION
         Function to send telegram message.
     .EXAMPLE
         Parameter set: "Proxy"
-            New-TelegramMessage -Token $Token -ChatID $ChatID -Message $Message [-ProxyURL $ProxyURL] [-Credentials $Credentials] [-TTL $TTL=(New-TimeSpan -Days 1)] [-PauseBetweenTries $PauseBetweenTries=30]
+        New-TelegramMessage -Token $Token -ChatID $ChatID -Message $Message [-ProxyURL $ProxyURL] [-Credentials $Credentials] [-TTL $TTL=(New-TimeSpan -Days 1)] [-PauseBetweenTries $PauseBetweenTries=30]
 #>
     [CmdletBinding()]
     Param(
@@ -1097,9 +1062,7 @@ Function New-TelegramMessage {
 Function Get-HTMLTable {
 <#
     .SYNOPSIS
-        AUTHOR Alexk
-        DATE   25.10.20
-        VER    1
+        Get HTML table
     .DESCRIPTION
         Create html table code.
     .EXAMPLE
@@ -1124,9 +1087,7 @@ Function Get-HTMLTable {
 function Get-HTMLRow {
 <#
     .SYNOPSIS
-        AUTHOR Alexk
-        DATE   25.10.20
-        VER    1
+        Get HTML row
     .DESCRIPTION
         Create html table row code.
     .EXAMPLE
@@ -1143,9 +1104,7 @@ function Get-HTMLRow {
     function Get-HTMLRowFullness {
     <#
         .SYNOPSIS
-            AUTHOR Alexk
-            DATE   25.10.20
-            VER    1
+            Get HTML row fullness
         .DESCRIPTION
             Return number of not empty columns.
         .EXAMPLE
@@ -1195,9 +1154,7 @@ function Get-HTMLRow {
 Function Get-HTMLCol  {
 <#
     .SYNOPSIS
-        AUTHOR Alexk
-        DATE   25.10.20
-        VER    1
+        Get HTML col
     .DESCRIPTION
         Create html table row code.
     .EXAMPLE
@@ -1233,9 +1190,7 @@ Function Get-HTMLCol  {
 Function Get-ContentFromHTMLTemplate {
 <#
     .SYNOPSIS
-        AUTHOR Alexk
-        DATE   25.10.20
-        VER    1
+        Get content from HTML template
     .DESCRIPTION
         Create html file from template.
     .EXAMPLE
@@ -1283,9 +1238,7 @@ Function Get-ContentFromHTMLTemplate {
 function Get-UniqueArrayMembers {
 <#
     .SYNOPSIS
-        AUTHOR Alexk
-        DATE   10.04.20
-        VER    1
+        Get unique array members
     .DESCRIPTION
         Return row with unique elements in column.
     .EXAMPLE
@@ -1312,9 +1265,7 @@ function Get-UniqueArrayMembers {
 Function Get-DifferenceBetweenArrays {
 <#
     .SYNOPSIS
-        AUTHOR Alexk
-        DATE   14.04.20
-        VER    1
+        Get difference between arrays
     .DESCRIPTION
         First and second arrays should be the same structure.
         Return array with objects absent in first array.
@@ -1400,9 +1351,7 @@ Function Get-DifferenceBetweenArrays {
 Function Join-Array {
 <#
     .SYNOPSIS
-        AUTHOR Alexk
-        DATE   23.06.20
-        VER    1
+        Join array
     .DESCRIPTION
         Function to union two array by key argument.
     .EXAMPLE
@@ -1461,16 +1410,14 @@ Function Join-Array {
 Function Start-PSScript {
 <#
     .SYNOPSIS
-        AUTHOR Alexk
-        DATE   25.10.20
-        VER    1
+        Start PS script
     .DESCRIPTION
         Function to start powershell script or command.
     .EXAMPLE
         Parameter set: "Script"
-            Start-PSScript -ScriptPath $ScriptPath -logFilePath $logFilePath [-Arguments $Arguments] [-Credentials $Credentials] [-WorkDir $WorkDir] [-Evaluate $Evaluate] [-DebugRun $DebugRun] [-Wait $Wait] [-Program $Program="C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe"]
+        Start-PSScript -ScriptPath $ScriptPath -logFilePath $logFilePath [-Arguments $Arguments] [-Credentials $Credentials] [-WorkDir $WorkDir] [-Evaluate $Evaluate] [-DebugRun $DebugRun] [-Wait $Wait] [-Program $Program="C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe"]
         Parameter set: "ScriptBlock"
-            Start-PSScript -ScriptBlock $ScriptBlock -logFilePath $logFilePath [-Arguments $Arguments] [-Credentials $Credentials] [-WorkDir $WorkDir] [-Evaluate $Evaluate] [-DebugRun $DebugRun] [-Wait $Wait] [-Program $Program="C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe"]
+        Start-PSScript -ScriptBlock $ScriptBlock -logFilePath $logFilePath [-Arguments $Arguments] [-Credentials $Credentials] [-WorkDir $WorkDir] [-Evaluate $Evaluate] [-DebugRun $DebugRun] [-Wait $Wait] [-Program $Program="C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe"]
 #>
     [CmdletBinding()]
     param (
@@ -1609,9 +1556,7 @@ Function Start-PSScript {
 function Import-ModuleRemotely {
 <#
     .SYNOPSIS
-        AUTHOR Alexk
-        DATE   25.10.20
-        VER    1
+        Import module remotely
     .DESCRIPTION
         Import powershell module to the remote session.
     .EXAMPLE
@@ -1682,14 +1627,12 @@ function Import-ModuleRemotely {
 function Invoke-PSScriptBlock {
 <#
     .SYNOPSIS
-        AUTHOR Alexk
-        DATE   08.04.20
-        VER    1
+        Invoke PS script block
     .DESCRIPTION
         Function to automate remote PS session or execute scripts locally
     .EXAMPLE
         Parameter set: "Remote"
-            Invoke-PSScriptBlock -ScriptBlock $ScriptBlock [-Computer $Computer] [-Credentials $Credentials] [-ImportLocalModule $ImportLocalModule] [-TestComputer $TestComputer] [-ExportedParameters $ExportedParameters] [-SessionOptions $SessionOptions] [-NewSession $NewSession]
+        Invoke-PSScriptBlock -ScriptBlock $ScriptBlock [-Computer $Computer] [-Credentials $Credentials] [-ImportLocalModule $ImportLocalModule] [-TestComputer $TestComputer] [-ExportedParameters $ExportedParameters] [-SessionOptions $SessionOptions] [-NewSession $NewSession]
 #>
     [CmdletBinding()]
     Param (
@@ -1855,9 +1798,7 @@ function Invoke-PSScriptBlock {
 Function Start-Program {
 <#
     .SYNOPSIS
-        AUTHOR Alexk
-        DATE   10.05.20
-        VER    1
+        Start program
     .DESCRIPTION
         Function to start os executable file.
     .EXAMPLE
@@ -1949,9 +1890,7 @@ Function Start-Program {
 Function Start-Module {
 <#
     .SYNOPSIS
-        AUTHOR Alexk
-        DATE   05.08.20
-        VER    1
+        Start module
     .DESCRIPTION
         Install if not installed and start module.
     .EXAMPLE
@@ -1998,16 +1937,14 @@ Function Start-Module {
 Function Invoke-CommandWithDebug {
 <#
     .SYNOPSIS
-        AUTHOR Alexk
-        DATE   05.05.20
-        VER    1
+        Invoke command with debug
     .DESCRIPTION
         Function to invoke command or script with debug info.
     .EXAMPLE
         Parameter set: "Script"
-            Invoke-CommandWithDebug -ScriptPath $ScriptPath [-Arguments $Arguments]
+        Invoke-CommandWithDebug -ScriptPath $ScriptPath [-Arguments $Arguments]
         Parameter set: "ScriptBlock"
-            Invoke-CommandWithDebug -ScriptBlock $ScriptBlock [-Arguments $Arguments]
+        Invoke-CommandWithDebug -ScriptBlock $ScriptBlock [-Arguments $Arguments]
 #>
     [CmdletBinding()]
     param
@@ -2056,9 +1993,7 @@ Function Invoke-CommandWithDebug {
 Function Convert-SpecialCharacters {
 <#
     .SYNOPSIS
-        AUTHOR Alexk
-        DATE   29.09.20
-        VER    1
+        Convert special characters
     .DESCRIPTION
         Replace special characters in string.
     .EXAMPLE
@@ -2095,9 +2030,7 @@ Function Convert-SpecialCharacters {
 function Convert-StringToDigitArray {
 <#
     .SYNOPSIS
-        AUTHOR Alexk
-        DATE   06.10.20
-        VER    1
+        Convert string to digit array
     .DESCRIPTION
         Convert string to array of digit.
     .EXAMPLE
@@ -2138,10 +2071,7 @@ function Convert-StringToDigitArray {
 function Invoke-TrailerIncrease {
 <#
     .SYNOPSIS
-        AUTHOR Alexk
-        DATE   25.10.20
-        VER    1
-    .DESCRIPTION
+        Invoke trailer increase
     .EXAMPLE
         Invoke-TrailerIncrease -String $String
 #>
@@ -2167,9 +2097,7 @@ function Invoke-TrailerIncrease {
 Function Format-TimeSpan {
 <#
     .SYNOPSIS
-        AUTHOR Alexk
-        DATE   21.06.20
-        VER    1
+        Format time span
     .DESCRIPTION
         Function to set time span presentation.
     .EXAMPLE
@@ -2235,9 +2163,7 @@ Function Format-TimeSpan {
 Function Start-ParallelPortPing {
 <#
     .SYNOPSIS
-        AUTHOR Alexk
-        DATE   23.06.20
-        VER    1
+        Start parallel port ping
     .DESCRIPTION
         Function to start parallel host ping with port.
         We can use port in host name.
@@ -2303,9 +2229,7 @@ Function Start-ParallelPortPing {
 Function Convert-FSPath {
 <#
     .SYNOPSIS
-        AUTHOR Alexk
-        DATE   29.04.20
-        VER    1
+        Convert FS path
     .DESCRIPTION
         Function to convert path from UNC to local or from local to UNC.
     .EXAMPLE
@@ -2340,9 +2264,7 @@ Function Convert-FSPath {
 function Get-ListByGroups {
 <#
     .SYNOPSIS
-        AUTHOR Alexk
-        DATE   06.10.20
-        VER    1
+        Get list by groups
     .DESCRIPTION
         Create console menu columned by data groups. Add digits for selection.
     .EXAMPLE
@@ -2432,9 +2354,7 @@ function Get-ListByGroups {
 Function Get-EventList {
 <#
     .SYNOPSIS
-        AUTHOR Alexk
-        DATE   25.10.20
-        VER    1
+        Get event list
     .DESCRIPTION
         Function to event list from log file in interval or not.
     .EXAMPLE
@@ -2498,9 +2418,7 @@ Function Get-EventList {
 Function Get-HelpersData {
 <#
     .SYNOPSIS
-        AUTHOR Alexk
-        DATE   11.04.20
-        VER    1
+        Get helpers data
     .DESCRIPTION
         Function return row in array from helpers CSV
     .EXAMPLE
@@ -2537,9 +2455,7 @@ Function Get-HelpersData {
 function Get-CopyByBITS {
 <#
     .SYNOPSIS
-        AUTHOR Alexk
-        DATE   25.10.20
-        VER    1
+        Get copy by BITS
     .DESCRIPTION
         Copy content of source path to destination path.
     .EXAMPLE
@@ -2562,9 +2478,7 @@ function Get-CopyByBITS {
     Function Show-CopyStatus {
     <#
         .SYNOPSIS
-            AUTHOR Alexk
-            DATE   25.10.20
-            VER    1
+            Show copy status
         .DESCRIPTION
             Show status of bits copy process.
         .EXAMPLE
@@ -2762,15 +2676,13 @@ function Get-CopyByBITS {
 function Get-ACLArray {
 <#
     .SYNOPSIS
-        AUTHOR Alexk
-        DATE   08.04.20
-        VER    1
+        Get ACL array
     .DESCRIPTION
         Function return Array of ACL for all objects in the Path
         Use Type to filter item. "file", "folder", "all"
     .EXAMPLE
         Parameter set: "Remote"
-            Get-ACLArray -Path $Path [-Computer $Computer] [-Credentials $Credentials=$null] [-Type $Type="all"]
+        Get-ACLArray -Path $Path [-Computer $Computer] [-Credentials $Credentials=$null] [-Type $Type="all"]
 #>
     [CmdletBinding()]
     Param (
@@ -2842,9 +2754,7 @@ function Get-ACLArray {
 function Resolve-IPtoFQDNinArray {
 <#
     .SYNOPSIS
-        AUTHOR Alexk
-        DATE   10.04.20
-        VER    1
+        Resolve I pto FQD nin array
     .DESCRIPTION
         Add FQDN column to IP array.
     .EXAMPLE
@@ -2891,15 +2801,72 @@ function Resolve-IPtoFQDNinArray {
     }
     Return $Res
 }
+function Split-Words {
+<#
+    .SYNOPSIS
+        Split words
+    .DESCRIPTION
+        Split words by capital letter.
+    .EXAMPLE
+        Split-Words -Word $Word
+#>
+    [OutputType([string])]
+    [CmdletBinding()]
+    param (
+        [Parameter( Mandatory = $true, Position = 0, HelpMessage = "Word to be splitted." )]
+        [ValidateNotNullOrEmpty()]
+        [string] $Word
+    )
+    $PrevCharHi = $null
+    $Result     = ""
+    $Turn       = $False
+    $Word       = $Word.Replace("-","")
+
+    foreach ( $Char in $Word.ToCharArray() ) {
+        $CharHi = ($Char -cmatch '[A-Z]')
+        if ($CharHi -and (-not $PrevCharHi) -and ($null -ne $PrevCharHi) ) {
+            $Result += " $Char"
+            $Turn = $true
+        }
+        Else {
+            if (( -not $CharHi) -and ($PrevCharHi) -and ($Result.Length -gt 2) -and ($null -ne $PrevCharHi) -and (-not $turn)) {
+                $LastChar = $Result.substring($result.Length - 1).ToLower()
+                $Result = "$($Result.substring(0, ($result.Length - 1))) $LastChar$Char"
+                $Turn = $true
+            }
+            Else {
+                $Result += "$Char"
+                $Turn = $False
+            }
+        }
+        $PrevCharHi = $CharHi
+    }
+    $WordsArray = $Result.Split(" ")
+    $Result = "$($WordsArray[0]) "
+
+    foreach ($item in $WordsArray[1..$WordsArray.count]) {
+        if($Item -ceq ($item.ToUpper())){
+            $Result += "$Item "
+        }
+        else {
+            if ( $Item.Substring(1) -ceq ($Item.Substring(1).ToLower() )){
+                $Result += "$($Item.ToLower()) "
+            }
+            Else {
+                $Result += "$Item "
+            }
+        }
+    }
+
+    return $Result.trim()
+}
 
 #endregion
 #region Dialog
 Function Show-OpenDialog{
 <#
     .SYNOPSIS
-        AUTHOR Alexk
-        DATE   25.10.20
-        VER    1
+        Show open dialog
     .DESCRIPTION
         Show windows open file dialog.
     .EXAMPLE
@@ -2947,9 +2914,7 @@ Function Show-OpenDialog{
 Function Show-Notification {
 <#
     .SYNOPSIS
-        AUTHOR Alexk
-        DATE   25.10.20
-        VER    1
+        Show notification
     .DESCRIPTION
         Function to show notification in the system tray.
     .EXAMPLE
@@ -3012,9 +2977,7 @@ Function Show-Notification {
 function Get-SettingsFromFile {
 <#
     .SYNOPSIS
-        AUTHOR Alexk
-        DATE   25.10.20
-        VER    1
+        Get settings from file
     .DESCRIPTION
         Load variables from external file.
     .EXAMPLE
@@ -3037,9 +3000,7 @@ function Get-SettingsFromFile {
 function Get-ErrorReporting {
 <#
     .SYNOPSIS
-        AUTHOR Alexk
-        DATE   25.10.20
-        VER    1
+        Get error reporting
     .DESCRIPTION
         Visualize errors and save it to file.
     .EXAMPLE
@@ -3165,7 +3126,7 @@ function Get-ErrorReporting {
 # }
 #>
 
-Export-ModuleMember -Function Get-NewAESKey, Get-VarFromAESFile, Set-VarToAESFile, Disconnect-VPN, Connect-VPN, Add-ToLog, Restart-Switches, Restart-SwitchInInterval, Get-EventList, Send-Email, Start-PSScript, Restart-LocalHostInInterval, Show-Notification, Restart-ServiceInInterval, New-TelegramMessage, Get-SettingsFromFile, Get-HTMLTable, Get-HTMLCol, Get-ContentFromHTMLTemplate, Get-ErrorReporting, Get-CopyByBITS, Show-OpenDialog, Import-ModuleRemotely, Invoke-PSScriptBlock, Get-ACLArray, Set-PSModuleManifest, Get-VarToString, Get-UniqueArrayMembers, Resolve-IPtoFQDNinArray, Get-HelpersData, Get-DifferenceBetweenArrays, Test-Credentials, Convert-FSPath, Start-Program, Test-ElevatedRights, Invoke-CommandWithDebug, Format-TimeSpan, Start-ParallelPortPing, Join-Array, Set-State, Send-Alert, Start-Module, Convert-SpecialCharacters, Get-ListByGroups, Convert-StringToDigitArray, Invoke-TrailerIncrease
+Export-ModuleMember -Function Get-NewAESKey, Get-VarFromAESFile, Set-VarToAESFile, Disconnect-VPN, Connect-VPN, Add-ToLog, Restart-Switches, Restart-SwitchInInterval, Get-EventList, Send-Email, Start-PSScript, Restart-LocalHostInInterval, Show-Notification, Restart-ServiceInInterval, New-TelegramMessage, Get-SettingsFromFile, Get-HTMLTable, Get-HTMLCol, Get-ContentFromHTMLTemplate, Get-ErrorReporting, Get-CopyByBITS, Show-OpenDialog, Import-ModuleRemotely, Invoke-PSScriptBlock, Get-ACLArray, Set-PSModuleManifest, Get-VarToString, Get-UniqueArrayMembers, Resolve-IPtoFQDNinArray, Get-HelpersData, Get-DifferenceBetweenArrays, Test-Credentials, Convert-FSPath, Start-Program, Test-ElevatedRights, Invoke-CommandWithDebug, Format-TimeSpan, Start-ParallelPortPing, Join-Array, Set-State, Send-Alert, Start-Module, Convert-SpecialCharacters, Get-ListByGroups, Convert-StringToDigitArray, Invoke-TrailerIncrease, Split-words
 
 <#
 
