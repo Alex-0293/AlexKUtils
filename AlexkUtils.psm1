@@ -1,14 +1,18 @@
-<#
+﻿<#
     .SYNOPSIS
         AlexK utility module.
     .DESCRIPTION
         This module contains utility functions.
         Use inside AlexkFramework.
+    .COMPONENT
+        AlexKUtils
+    .LINK
+        https://github.com/Alex-0293/AlexKUtils
     .NOTES
         AUTHOR  Alexk
         CREATED 25.04.19
-        MOD     26.10.20
-        VER     4
+        MOD     05.11.20
+        VER     5
 #>
 
 
@@ -24,6 +28,10 @@ function Get-NewAESKey {
         This function create a new AES key and save it to file
     .EXAMPLE
         Get-NewAESKey [-AESKeyFilePath $AESKeyFilePath] [-PassThru $PassThru]
+    .NOTES
+        AUTHOR  Alexk
+        CREATED 05.11.20
+        VER     1
 #>
     [OutputType([Byte[]])]
     [CmdletBinding()]
@@ -53,6 +61,10 @@ Function Get-VarFromAESFile  {
         Function to read variable from file encrypted with AES key.
     .EXAMPLE
         Get-VarFromAESFile -AESKeyFilePath $AESKeyFilePath -VarFilePath $VarFilePath
+    .NOTES
+        AUTHOR  Alexk
+        CREATED 05.11.20
+        VER     1
 #>
     [OutputType([SecureString])]
     [CmdletBinding()]
@@ -103,6 +115,10 @@ Function Set-VarToAESFile {
         Function to write variable to file with encryption with AES key file
     .EXAMPLE
         Set-VarToAESFile -Var $Var -AESKeyFilePath $AESKeyFilePath -VarFilePath $VarFilePath [-PassThru $PassThru]
+    .NOTES
+        AUTHOR  Alexk
+        CREATED 05.11.20
+        VER     1
 #>
     [CmdletBinding()]
     param
@@ -135,6 +151,10 @@ Function Get-VarToString {
         Function to make string from secure string.
     .EXAMPLE
         Get-VarToString -Var $Var
+    .NOTES
+        AUTHOR  Alexk
+        CREATED 05.11.20
+        VER     1
 #>
     [OutputType([string])]
     [CmdletBinding()]
@@ -162,6 +182,10 @@ Function Connect-VPN {
         Function to establish VPN connection
     .EXAMPLE
         Connect-VPN -VPNConnectionName $VPNConnectionName -logFilePath $logFilePath -Login $Login -Password $Password
+    .NOTES
+        AUTHOR  Alexk
+        CREATED 05.11.20
+        VER     1
 #>
     [OutputType([string])]
     [CmdletBinding()]
@@ -219,6 +243,10 @@ function Disconnect-VPN {
         Function to break VPN connection
     .EXAMPLE
         Disconnect-VPN -VPNConnectionName $VPNConnectionName -logFilePath $logFilePath
+    .NOTES
+        AUTHOR  Alexk
+        CREATED 05.11.20
+        VER     1
 #>
     [OutputType([bool])]
     [CmdletBinding()]
@@ -254,6 +282,10 @@ Function Restart-LocalHostInInterval {
         Function to restart computer in time interval based on last restart.
     .EXAMPLE
         Restart-LocalHostInInterval -LogFilePath $LogFilePath [-MinIntervalBetweenReboots $MinIntervalBetweenReboots] [-PassThru $PassThru]
+    .NOTES
+        AUTHOR  Alexk
+        CREATED 05.11.20
+        VER     1
 #>
     [CmdletBinding()]
     param (
@@ -309,6 +341,10 @@ Function Restart-Switches {
         Restart-Switches -SwitchesIP $SwitchesIP -logFilePath $logFilePath -PLinkPath $PLinkPath -SshConString $SshConString -SshCommand $SshCommand [-Login $Login] [-Password $Password]
         Parameter set: "Cert"
         Restart-Switches -SwitchesIP $SwitchesIP -logFilePath $logFilePath -PLinkPath $PLinkPath -SshConString $SshConString -SshCommand $SshCommand [-CertFilePath $CertFilePath]
+    .NOTES
+        AUTHOR  Alexk
+        CREATED 05.11.20
+        VER     1
 #>
     [CmdletBinding()]
     Param
@@ -370,6 +406,10 @@ Function Restart-SwitchInInterval {
         Restart-SwitchInInterval -SwitchesIP $SwitchesIP -logFilePath $logFilePath -PLinkPath $PLinkPath -SshConString $SshConString -SshCommand $SshCommand [-Login $Login] [-Password $Password] [-MinIntervalBetweenReboots $MinIntervalBetweenReboots]
         Parameter set: "Cert"
         Restart-SwitchInInterval -SwitchesIP $SwitchesIP -logFilePath $logFilePath -PLinkPath $PLinkPath -SshConString $SshConString -SshCommand $SshCommand [-CertFilePath $CertFilePath] [-MinIntervalBetweenReboots $MinIntervalBetweenReboots]
+    .NOTES
+        AUTHOR  Alexk
+        CREATED 05.11.20
+        VER     1
 #>
     [CmdletBinding()]
     param (
@@ -433,6 +473,10 @@ Function Restart-ServiceInInterval {
         Function to create logger object.
     .EXAMPLE
         Restart-ServiceInInterval -EventLogPath $EventLogPath -ServiceName $ServiceName [-MinIntervalBetweenRestarts $MinIntervalBetweenRestarts=0]
+    .NOTES
+        AUTHOR  Alexk
+        CREATED 05.11.20
+        VER     1
 #>
     [CmdletBinding()]
     param (
@@ -477,6 +521,10 @@ function Test-Credentials {
         Test user credentials.
     .EXAMPLE
         Test-Credentials -Credentials $Credentials
+    .NOTES
+        AUTHOR  Alexk
+        CREATED 05.11.20
+        VER     1
 #>
 
     [CmdletBinding()]
@@ -529,6 +577,10 @@ function Test-ElevatedRights {
         Test elevated rights
     .EXAMPLE
         Test-ElevatedRights [-Identity $Identity=[Security.Principal.WindowsIdentity]::GetCurrent()]
+    .NOTES
+        AUTHOR  Alexk
+        CREATED 05.11.20
+        VER     1
 #>
     [CmdletBinding()]
     [OutputType([Bool])]
@@ -553,7 +605,11 @@ Function Add-ToLog {
     .DESCRIPTION
         Function to write message into a log file
     .EXAMPLE
-        Add-ToLog -Message $Message -logFilePath $logFilePath [-Mode $Mode="append"] [-Display $Display] [-Status $Status] [-Format $Format] [-Level $Level]
+        Add-ToLog -Message $Message -logFilePath $logFilePath [-Mode $Mode="append"] [-Display $Display] [-Status $Status] [-Format $Format] [-Level $Level] [-ShowLogName $ShowLogName]
+    .NOTES
+        AUTHOR  Alexk
+        CREATED 05.11.20
+        VER     1
 #>
     [CmdletBinding()]
     Param
@@ -575,7 +631,9 @@ Function Add-ToLog {
         [Parameter(Mandatory = $false, Position = 5, HelpMessage = "Date format string." )]
         [string] $Format,
         [Parameter(Mandatory = $false, Position =6, HelpMessage = "Level in string hierarchy." )]
-        [int16] $Level
+        [int16] $Level,
+        [Parameter(Mandatory = $false, Position =7, HelpMessage = "Display log name." )]
+        [switch] $ShowLogName
     )
     if ( -not $Global:modSuppressOutput ) {
         if (-not $Level) {
@@ -654,7 +712,7 @@ Function Add-ToLog {
             }
         }
         If ($Display){
-            if ($logFilePath -ne $Global:gsScriptLogFilePath){
+            if ($logFilePath -ne $Global:gsScriptLogFilePath -and $ShowLogName ){
                 $TextLen = $text.Length
                 if ($TextLen -le $Global:gsLogFileNamePosition){
                     $text = $text.PadRight($Global:gsLogFileNamePosition, " ")
@@ -705,6 +763,10 @@ Function Send-Alert {
         Send alert by custom transport.
     .EXAMPLE
         Send-Alert -AlertParameters $AlertParameters -AlertMessage $AlertMessage [-AlertSubject $AlertSubject]
+    .NOTES
+        AUTHOR  Alexk
+        CREATED 05.11.20
+        VER     1
 #>
     [CmdletBinding()]
     Param (
@@ -736,6 +798,10 @@ Function Set-State {
         Save object state to file
     .EXAMPLE
         Set-State -StateObject $StateObject -StateFilePath $StateFilePath [-AlertType $AlertType] [-AlertOnChange $AlertOnChange] [-SaveOnChange $SaveOnChange]
+    .NOTES
+        AUTHOR  Alexk
+        CREATED 05.11.20
+        VER     1
 #>
     [CmdletBinding()]
     Param (
@@ -832,6 +898,10 @@ Function Send-Email {
     .EXAMPLE
         Parameter set: "Auth"
         Send-Email -SmtpServer $SmtpServer -From $From -To $To [-Subject $Subject] [-Body $Body] [-HtmlBody $HtmlBody] [-User $User] [-Password $Password] [-Port $Port=25] [-SSL $SSL] [-Attachment $Attachment] [-AttachmentContentId $AttachmentContentId] [-TTL $TTL=(New-TimeSpan -days 1)] [-PauseBetweenTries $PauseBetweenTries=30]
+    .NOTES
+        AUTHOR  Alexk
+        CREATED 05.11.20
+        VER     1
 #>
     [CmdletBinding()]
     param (
@@ -974,6 +1044,10 @@ Function New-TelegramMessage {
     .EXAMPLE
         Parameter set: "Proxy"
         New-TelegramMessage -Token $Token -ChatID $ChatID -Message $Message [-ProxyURL $ProxyURL] [-Credentials $Credentials] [-TTL $TTL=(New-TimeSpan -Days 1)] [-PauseBetweenTries $PauseBetweenTries=30]
+    .NOTES
+        AUTHOR  Alexk
+        CREATED 05.11.20
+        VER     1
 #>
     [CmdletBinding()]
     Param(
@@ -1067,6 +1141,10 @@ Function Get-HTMLTable {
         Create html table code.
     .EXAMPLE
         Get-HTMLTable -Array $Array
+    .NOTES
+        AUTHOR  Alexk
+        CREATED 05.11.20
+        VER     1
 #>
     [CmdletBinding()]
     Param(
@@ -1092,6 +1170,10 @@ function Get-HTMLRow {
         Create html table row code.
     .EXAMPLE
         Get-HTMLRow -Line $Line [-ColSpan $ColSpan=0]
+    .NOTES
+        AUTHOR  Alexk
+        CREATED 05.11.20
+        VER     1
 #>
     [CmdletBinding()]
     Param(
@@ -1109,6 +1191,10 @@ function Get-HTMLRow {
             Return number of not empty columns.
         .EXAMPLE
             Get-HTMLRowFullness -Line $Line
+        .NOTES
+            AUTHOR  Alexk
+            CREATED 05.11.20
+            VER     1
     #>
         [CmdletBinding()]
         Param(
@@ -1159,6 +1245,10 @@ Function Get-HTMLCol  {
         Create html table row code.
     .EXAMPLE
         Get-HTMLCol -Column $Column [-ColSpan $ColSpan=0] [-Bold $Bold=$false]
+    .NOTES
+        AUTHOR  Alexk
+        CREATED 05.11.20
+        VER     1
 #>
     [CmdletBinding()]
     Param(
@@ -1195,6 +1285,10 @@ Function Get-ContentFromHTMLTemplate {
         Create html file from template.
     .EXAMPLE
         Get-ContentFromHTMLTemplate -HTMLData $HTMLData -ColNames $ColNames -HTMLTemplateFile $HTMLTemplateFile [-HTMLFile $HTMLFile]
+    .NOTES
+        AUTHOR  Alexk
+        CREATED 05.11.20
+        VER     1
 #>
     [CmdletBinding()]
     Param(
@@ -1243,6 +1337,10 @@ function Get-UniqueArrayMembers {
         Return row with unique elements in column.
     .EXAMPLE
         Get-UniqueArrayMembers -Array $Array -ColumnName $ColumnName
+    .NOTES
+        AUTHOR  Alexk
+        CREATED 05.11.20
+        VER     1
 #>
     [CmdletBinding()]
     Param(
@@ -1271,6 +1369,10 @@ Function Get-DifferenceBetweenArrays {
         Return array with objects absent in first array.
     .EXAMPLE
         Get-DifferenceBetweenArrays -FirstArray $FirstArray -SecondArray $SecondArray
+    .NOTES
+        AUTHOR  Alexk
+        CREATED 05.11.20
+        VER     1
 #>
     [CmdletBinding()]
     Param(
@@ -1356,6 +1458,10 @@ Function Join-Array {
         Function to union two array by key argument.
     .EXAMPLE
         Join-Array -PrimaryPSO $PrimaryPSO -SecondaryPSO $SecondaryPSO -Key $Key [-MergeColumns $MergeColumns]
+    .NOTES
+        AUTHOR  Alexk
+        CREATED 05.11.20
+        VER     1
 #>
     [CmdletBinding()]
     [OutputType([array])]
@@ -1418,6 +1524,10 @@ Function Start-PSScript {
         Start-PSScript -ScriptPath $ScriptPath -logFilePath $logFilePath [-Arguments $Arguments] [-Credentials $Credentials] [-WorkDir $WorkDir] [-Evaluate $Evaluate] [-DebugRun $DebugRun] [-Wait $Wait] [-Program $Program="C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe"]
         Parameter set: "ScriptBlock"
         Start-PSScript -ScriptBlock $ScriptBlock -logFilePath $logFilePath [-Arguments $Arguments] [-Credentials $Credentials] [-WorkDir $WorkDir] [-Evaluate $Evaluate] [-DebugRun $DebugRun] [-Wait $Wait] [-Program $Program="C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe"]
+    .NOTES
+        AUTHOR  Alexk
+        CREATED 05.11.20
+        VER     1
 #>
     [CmdletBinding()]
     param (
@@ -1561,6 +1671,11 @@ function Import-ModuleRemotely {
         Import powershell module to the remote session.
     .EXAMPLE
         Import-ModuleRemotely -Modules $Modules -Session $Session
+    .NOTES
+        AUTHOR  Alexk
+        CREATED 05.11.20
+        MOD     Import module remotely
+        VER     1
 #>
     [CmdletBinding()]
     Param(
@@ -1633,6 +1748,10 @@ function Invoke-PSScriptBlock {
     .EXAMPLE
         Parameter set: "Remote"
         Invoke-PSScriptBlock -ScriptBlock $ScriptBlock [-Computer $Computer] [-Credentials $Credentials] [-ImportLocalModule $ImportLocalModule] [-TestComputer $TestComputer] [-ExportedParameters $ExportedParameters] [-SessionOptions $SessionOptions] [-NewSession $NewSession]
+    .NOTES
+        AUTHOR  Alexk
+        CREATED 05.11.20
+        VER     1
 #>
     [CmdletBinding()]
     Param (
@@ -1651,10 +1770,12 @@ function Invoke-PSScriptBlock {
         $ExportedParameters,
         [Parameter( Mandatory = $False, Position = 6, ParameterSetName = "Remote", HelpMessage = "PS session options." )]
         $SessionOptions,
-        [Parameter( Mandatory = $False, Position = 6, ParameterSetName = "Remote", HelpMessage = "Run new session with host and credentials if already exist." )]
-        [switch] $NewSession
+        [Parameter( Mandatory = $False, Position = 7, ParameterSetName = "Remote", HelpMessage = "Run new session with host and credentials if already exist." )]
+        [switch] $NewSession,
+        [Parameter( Mandatory = $False, Position = 8, ParameterSetName = "Remote", HelpMessage = "Debug remote session." )]
+        [switch] $DebugSession
     )
-
+    #https://stackoverflow.com/questions/28362175/powershell-debug-invoke-command
     $Res = $null
 
 
@@ -1754,6 +1875,7 @@ function Invoke-PSScriptBlock {
             $NewStrings = '
                 $Params = $Using:GlobalExportedParameters
             '
+
             $ScriptBlockWithExportedParams = $ScriptBlock.ToString()
             $FirstString = ($ScriptBlockWithExportedParams -split "`n")[1]
             $ScriptBlockWithExportedParams = $ScriptBlockWithExportedParams.Replace("Using:", "Params.")
@@ -1763,8 +1885,16 @@ function Invoke-PSScriptBlock {
             if ( $FirstString -notlike "*param*(*)*" ) {
                 $ScriptBlockWithExportedParams = $NewStrings + $ScriptBlockWithExportedParams
             }
-
-            $ScriptBlockWithExportedParams = [scriptblock]::Create($ScriptBlockWithExportedParams)
+            
+            if ( $DebugSession ){
+                $AttachDebugger = '
+                    Set-PSBreakpoint -Variable "Params"
+                '
+            }
+            Else{
+                $AttachDebugger = ""
+            }
+            $ScriptBlockWithExportedParams = [scriptblock]::Create(($AttachDebugger + $ScriptBlockWithExportedParams))
 
             if ( $FirstString -notlike "*param*(*)*" ) {
                 $Res = Invoke-Command -Session $Global:modSession -ScriptBlock $ScriptBlockWithExportedParams
@@ -1780,7 +1910,7 @@ function Invoke-PSScriptBlock {
             Remove-Variable -Name "GlobalExportedParameters"  -Scope "Global" -Force | Out-Null
         }
         Else {
-            $Res = Invoke-Command -Session $Session -ScriptBlock $ScriptBlock
+            $Res = Invoke-Command -Session $Global:modSession -ScriptBlock $ScriptBlock
         }
         if ( $NewSession ){
             Remove-PSSession $Session
@@ -1803,6 +1933,10 @@ Function Start-Program {
         Function to start os executable file.
     .EXAMPLE
         Start-Program -LogFilePath $LogFilePath [-Program $Program] [-Arguments $Arguments] [-Credentials $Credentials] [-WorkDir $WorkDir] [-Evaluate $Evaluate] [-DebugRun $DebugRun] [-Wait $Wait]
+    .NOTES
+        AUTHOR  Alexk
+        CREATED 05.11.20
+        VER     1
 #>
     [CmdletBinding()]
     param (
@@ -1887,6 +2021,7 @@ Function Start-Program {
     }
     Return $Process
 }
+
 Function Start-Module {
 <#
     .SYNOPSIS
@@ -1895,22 +2030,39 @@ Function Start-Module {
         Install if not installed and start module.
     .EXAMPLE
         Start-Module -Module $Module [-Force $Force] [-InstallScope $InstallScope]
+    .NOTES
+        AUTHOR  Alexk
+        CREATED 05.11.20
+        MOD     Start module
+        VER     1
 #>
     [CmdletBinding()]
     Param (
-        [Parameter( Mandatory = $True, Position = 1, HelpMessage = "Module name.")]
+        [Parameter( Mandatory = $True, Position = 0, HelpMessage = "Module name.")]
         [string] $Module,
-        [Parameter( Mandatory = $False, Position = 2, HelpMessage = "Force reload module.")]
+        [Parameter( Mandatory = $False, Position = 1, HelpMessage = "Force reload module.")]
         [switch] $Force,
-        [Parameter( Mandatory = $False, Position = 3, HelpMessage = "Install scope.")]
+        [Parameter( Mandatory = $False, Position = 2, HelpMessage = "Install scope.")]
         [string] $InstallScope
     )
 
-    if ($Force) {
-        $Res = Import-Module $Module -Force -PassThru
+     if ($Force) {
+        $Res = Import-Module $Module -Force -PassThru -Scope Global
+
+        $ModuleData = [PSCustomObject]@{
+            Owner  = ( $ScriptStackItem | Select-Object -last 1 ).ScriptName
+            Module = $Module
+        }
+        $Global:gsImportedModule += $ModuleData
     }
     Else {
-        $Res = Import-Module $Module -PassThru
+        $Res = Import-Module $Module -PassThru -Scope Global
+
+        $ModuleData = [PSCustomObject]@{
+            Owner  = ( $ScriptStackItem | Select-Object -last 1 ).ScriptName
+            Module = $Module
+        }
+        $Global:gsImportedModule += $ModuleData
     }
 
     if ( -not $Res ) {
@@ -1922,15 +2074,52 @@ Function Start-Module {
         }
 
         if ($Force) {
-            $Res = Import-Module $Module -Force -PassThru
+            $Res = Import-Module $Module -Force -PassThru -Scope Global
         }
         Else {
-            $Res = Import-Module $Module -PassThru
+            $Res = Import-Module $Module -PassThru -Scope Global
         }
 
         if (-not $res) {
             Add-ToLog "Module [$Module] could not be loaded!" -Display -Status "error" -logFilePath $Global:gsScriptLogFilePath
             exit 1
+        }
+        Else {
+            $ModuleData = [PSCustomObject]@{
+                Owner  = ( $ScriptStackItem | Select-Object -last 1 ).ScriptName
+                Module = $Module
+            }
+            $Global:gsImportedModule += $ModuleData
+        }
+    }
+}
+function Remove-Modules {
+<#
+    .SYNOPSIS
+        Remove modules
+    .EXAMPLE
+        Remove-Modules -Module $Module [-Force $Force]
+    .NOTES
+        AUTHOR  Alexk
+        CREATED 05.11.20
+        VER     1
+#>
+    [CmdletBinding()]
+    param (
+        [Parameter( Mandatory = $True, Position = 0, HelpMessage = "Module name.")]
+        [string[]] $Module,
+        [Parameter( Mandatory = $False, Position = 1, HelpMessage = "Force reload module.")]
+        [switch] $Force
+    )
+
+    $Modules = get-module | Where-Object {$_.name -in $Module} | Select-Object Name, RequiredModules | Sort-Object RequiredModules, Name
+
+    foreach ( $item in $modules ){
+        if ( $Force ){
+            Remove-Module -Name $item.name -force
+        }
+        Else {
+            Remove-Module -Name $item.name
         }
     }
 }
@@ -1945,6 +2134,10 @@ Function Invoke-CommandWithDebug {
         Invoke-CommandWithDebug -ScriptPath $ScriptPath [-Arguments $Arguments]
         Parameter set: "ScriptBlock"
         Invoke-CommandWithDebug -ScriptBlock $ScriptBlock [-Arguments $Arguments]
+    .NOTES
+        AUTHOR  Alexk
+        CREATED 05.11.20
+        VER     1
 #>
     [CmdletBinding()]
     param
@@ -1998,6 +2191,10 @@ Function Convert-SpecialCharacters {
         Replace special characters in string.
     .EXAMPLE
         Convert-SpecialCharacters -String $String [-Mode $Mode="wildcard"]
+    .NOTES
+        AUTHOR  Alexk
+        CREATED 05.11.20
+        VER     1
 #>
     [OutputType([String])]
     [CmdletBinding()]
@@ -2034,36 +2231,49 @@ function Convert-StringToDigitArray {
     .DESCRIPTION
         Convert string to array of digit.
     .EXAMPLE
-        Convert-StringToDigitArray -UserInput $UserInput
+        Convert-StringToDigitArray -UserInput $UserInput -DataSize $DataSize
+    .NOTES
+        AUTHOR  Alexk
+        CREATED 05.11.20
+        VER     1
 #>
     [OutputType([Int[]])]
     [CmdletBinding()]
     param(
         [Parameter( Mandatory = $True, Position = 0, HelpMessage = "String input data.")]
-        [string] $UserInput
+        [string] $UserInput,
+        [Parameter( Mandatory = $True, Position = 1, HelpMessage = "Data size.")]
+        [int] $DataSize
     )
 
     $SelectedArray = ($UserInput -split ",").trim()
-    $SelectedIntervals = $SelectedArray | Where-Object { $_ -like "*-*" }
-    [int[]]$SelectedArray = $SelectedArray | Where-Object { $_ -NotLike "*-*" }
-    foreach ( $item in $SelectedIntervals ) {
-        [int[]]$Array = $item -split "-"
-        if ( $Array.count -eq 2 ) {
-            if ( $Array[0] -le $Array[1] ) {
-                $Begin = $Array[0]
-                $End = $Array[1]
-            }
-            Else {
-                $Begin = $Array[1]
-                $End = $Array[0]
-            }
-            foreach ( $Element in ($begin..$end) ) {
-                if ( -not ($Element -in $SelectedArray) -and ($Element -gt 0) ) {
-                    $SelectedArray += $Element
+    if ( $SelectedArray[0] -eq "*" ){
+        $SelectedArray = @()
+        foreach ( $Element in ( 1..( $DataSize-1 ) ) ) {
+            $SelectedArray += $Element
+        }
+    }
+    Else {
+        $SelectedIntervals = $SelectedArray | Where-Object { $_ -like "*-*" }
+        [int[]]$SelectedArray = $SelectedArray | Where-Object { $_ -NotLike "*-*" }
+        foreach ( $item in $SelectedIntervals ) {
+            [int[]]$Array = $item -split "-"
+            if ( $Array.count -eq 2 ) {
+                if ( $Array[0] -le $Array[1] ) {
+                    $Begin = $Array[0]
+                    $End = $Array[1]
+                }
+                Else {
+                    $Begin = $Array[1]
+                    $End = $Array[0]
+                }
+                foreach ( $Element in ($begin..$end) ) {
+                    if ( -not ($Element -in $SelectedArray) -and ($Element -gt 0) ) {
+                        $SelectedArray += $Element
+                    }
                 }
             }
         }
-
     }
 
     return $SelectedArray
@@ -2074,6 +2284,10 @@ function Invoke-TrailerIncrease {
         Invoke trailer increase
     .EXAMPLE
         Invoke-TrailerIncrease -String $String
+    .NOTES
+        AUTHOR  Alexk
+        CREATED 05.11.20
+        VER     1
 #>
 
     [OutputType([string])]
@@ -2102,6 +2316,10 @@ Function Format-TimeSpan {
         Function to set time span presentation.
     .EXAMPLE
         Format-TimeSpan -TimeSpan $TimeSpan [-Format $Format="Auto"] [-Round $Round=0]
+    .NOTES
+        AUTHOR  Alexk
+        CREATED 05.11.20
+        VER     1
 #>
     [CmdletBinding()]
     param
@@ -2169,6 +2387,10 @@ Function Start-ParallelPortPing {
         We can use port in host name.
     .EXAMPLE
         Start-ParallelPortPing -Hosts $Hosts [-Count $Count=1] [-Delay $Delay=1]
+    .NOTES
+        AUTHOR  Alexk
+        CREATED 05.11.20
+        VER     1
 #>
     [CmdletBinding()]
     param(
@@ -2234,6 +2456,10 @@ Function Convert-FSPath {
         Function to convert path from UNC to local or from local to UNC.
     .EXAMPLE
         Convert-FSPath -CurrentPath $CurrentPath [-Computer $Computer]
+    .NOTES
+        AUTHOR  Alexk
+        CREATED 05.11.20
+        VER     1
 #>
     [CmdletBinding()]
     param
@@ -2268,17 +2494,40 @@ function Get-ListByGroups {
     .DESCRIPTION
         Create console menu columned by data groups. Add digits for selection.
     .EXAMPLE
-        Get-ListByGroups -GroupArray $GroupArray
+        Parameter set: "Select"
+        Get-ListByGroups -GroupArray $GroupArray [-Title $Title] [-SelectMessage $SelectMessage] [-SelectSource $SelectSource] [-SelectKey $SelectKey] [-SplitWords $SplitWords]
+        Parameter set: "View"
+        Get-ListByGroups -GroupArray $GroupArray [-Title $Title] [-SplitWords $SplitWords] [-PassThru $PassThru]
+    .NOTES
+        AUTHOR  Alexk
+        CREATED 05.11.20
+        VER     1
 #>
     [OutputType([String[]])]
     [CmdletBinding()]
     param(
         [Parameter( Mandatory = $True, Position = 0, HelpMessage = "Array of columns with data.")]
-        [array] $GroupArray
+        [array] $GroupArray,
+        [Parameter( Mandatory = $false, Position = 1, HelpMessage = "Title message.")]
+        [string] $Title,
+        [Parameter( Mandatory = $false, Position = 2, HelpMessage = "Select message.", ParameterSetName = "Select")]
+        [string] $SelectMessage,
+        [Parameter( Mandatory = $false, Position = 3, HelpMessage = "Select source array.", ParameterSetName = "Select")]
+        [PSObject[]] $SelectSource,
+        [Parameter( Mandatory = $false, Position = 4, HelpMessage = "Select key field.", ParameterSetName = "Select")]
+        [string] $SelectKey,
+        [Parameter( Mandatory = $False, Position = 5, HelpMessage = "Split words in menu.")]
+        [switch] $SplitWords,
+        [Parameter( Mandatory = $False, Position = 6, HelpMessage = "Return object.", ParameterSetName = "View")]
+        [switch] $PassThru
     )
 
+    if ( $Title ){
+        Write-host -object $Title -ForegroundColor DarkBlue -NoNewLine
+    }
+
     $TempArray   =  @("Exit")
-    $TempArray  += ($GroupArray | Where-Object {$null -ne $_})
+    $TempArray  += (@(,$GroupArray) | Where-Object {$null -ne $_})
     $GroupArray  =  $TempArray
 
     [array] $List = @()
@@ -2303,17 +2552,28 @@ function Get-ListByGroups {
             foreach ( $Item in $Group ) {
                 $ItemNumber = $List.IndexOf($Item)
                 #Write-Host "".PadRight($StringLen, $PadSymbol) -ForegroundColor blue
-                Write-Host "`n[ $ItemNumber] " -ForegroundColor Cyan -NoNewLine
+                Write-Host "`n[$ItemNumber] " -ForegroundColor Cyan -NoNewLine
                 Write-Host "$Item."            -ForegroundColor red
                 Write-Host ""
             }
         }
         Else {
-            foreach ( $Item in (0..$MaxGroupCount) ) {
-                $GroupItem         = $Group[$Item]
+            foreach ( $Item in ( 0..( $MaxGroupCount ) ) ) {
+                if ( $SplitWords ) {
+                    #write-host $Group[$Item]
+                    if ( $Group[$Item] ) {
+                        $GroupItem = Split-Words -Word ($Group[$Item])
+                    }
+                    Else {
+                        $GroupItem = ""
+                    }
+                }
+                Else {
+                    $GroupItem         = $Group[$Item]
+                }
                 $GroupItemSplitted = $GroupItem
                 if ( $GroupItem ) {
-                    $ItemNumber            = $List.IndexOf($GroupItem)
+                    $ItemNumber            = $List.IndexOf($Group[$Item])
                     $ItemNumberWithPadding = ([string]$ItemNumber).PadLeft($MaxNumLen , " ")
                     $ItemView              = "[$ItemNumberWithPadding]$Padding$GroupItemSplitted.".PadRight($MaxItemLen, " ")
                 }
@@ -2339,17 +2599,37 @@ function Get-ListByGroups {
     }
     #Write-Host "".PadRight($StringLen, $PadSymbol) -ForegroundColor Cyan
     Write-Host ""
-    Write-Host "Select items: " -ForegroundColor Cyan -NoNewline
+    if ( $SelectMessage ) {
+        Write-Host "(elements: x,y..; interval: x-y..; all elements: *) $SelectMessage " -ForegroundColor Cyan -NoNewline
+    }
+    Else {
+        Write-Host "(elements: x,y..; interval: x-y..; all elements: *) Select items: " -ForegroundColor Cyan -NoNewline
+    }
     $SelectedList = Read-Host
-    while ( -not ($SelectedList -match '[0-9\-,\s]') ) {
-        Write-Host "Wrong input [$SelectedList]! Allow only digit [0-9], interval [-], space [ ], separator [,]." -ForegroundColor Red -NoNewline
+    while ( -not ($SelectedList -match '[0-9\-*,\s]') ) {
+        Write-Host "Wrong input [$SelectedList]! Allow only digit [0-9], interval [-], space [ ], separator [,], all elements [*]." -ForegroundColor Red -NoNewline
         $SelectedList = Read-Host
     }
 
-    $SelectedArray = Convert-StringToDigitArray -UserInput $SelectedList
-    $SelectedList  = $List | Where-Object {$List.IndexOf($_) -in $SelectedArray}
+    $SelectedArray = Convert-StringToDigitArray -UserInput $SelectedList -DataSize $List.count
+    $SelectedList = @()
+    foreach ( $item in $SelectedArray ){
+        $SelectedList  += $List[$item]
+    }
 
-    return $SelectedList
+    if ( $SelectSource ){
+        if ( $SelectKey ) {
+            $Result    = $SelectSource | where-object {$_.$SelectKey -like "*$SelectedList*" }
+        }
+        Else {
+            $Result    = $SelectSource | where-object {$_ -like "*$SelectedList*" }
+        }
+        return $Result
+    }
+
+    if ( $PassThru ) {
+        return $SelectedList
+    }
 }
 Function Get-EventList {
 <#
@@ -2359,6 +2639,10 @@ Function Get-EventList {
         Function to event list from log file in interval or not.
     .EXAMPLE
         Get-EventList -LogFilePath $LogFilePath [-Event $Event] [-Interval $Interval=0]
+    .NOTES
+        AUTHOR  Alexk
+        CREATED 05.11.20
+        VER     1
 #>
     [CmdletBinding()]
     param (
@@ -2423,6 +2707,10 @@ Function Get-HelpersData {
         Function return row in array from helpers CSV
     .EXAMPLE
         Get-HelpersData -CSVFilePath $CSVFilePath -Column $Column -Value $Value
+    .NOTES
+        AUTHOR  Alexk
+        CREATED 05.11.20
+        VER     1
 #>
     [CmdletBinding()]
     Param (
@@ -2460,6 +2748,10 @@ function Get-CopyByBITS {
         Copy content of source path to destination path.
     .EXAMPLE
         Get-CopyByBITS -Source $Source -Destination $Destination [-Replace $Replace] [-ShowStatus $ShowStatus]
+    .NOTES
+        AUTHOR  Alexk
+        CREATED 05.11.20
+        VER     1
 #>
     [CmdletBinding()]
     Param(
@@ -2483,6 +2775,10 @@ function Get-CopyByBITS {
             Show status of bits copy process.
         .EXAMPLE
             Show-CopyStatus -CommonData $CommonData -Array $Array
+        .NOTES
+            AUTHOR  Alexk
+            CREATED 05.11.20
+            VER     1
     #>
         [CmdletBinding()]
         Param(
@@ -2683,6 +2979,10 @@ function Get-ACLArray {
     .EXAMPLE
         Parameter set: "Remote"
         Get-ACLArray -Path $Path [-Computer $Computer] [-Credentials $Credentials=$null] [-Type $Type="all"]
+    .NOTES
+        AUTHOR  Alexk
+        CREATED 05.11.20
+        VER     1
 #>
     [CmdletBinding()]
     Param (
@@ -2759,6 +3059,10 @@ function Resolve-IPtoFQDNinArray {
         Add FQDN column to IP array.
     .EXAMPLE
         Resolve-IPtoFQDNinArray -Array $Array
+    .NOTES
+        AUTHOR  Alexk
+        CREATED 05.11.20
+        VER     1
 #>
     [CmdletBinding()]
     Param(
@@ -2809,6 +3113,10 @@ function Split-Words {
         Split words by capital letter.
     .EXAMPLE
         Split-Words -Word $Word
+    .NOTES
+        AUTHOR  Alexk
+        CREATED 05.11.20
+        VER     1
 #>
     [OutputType([string])]
     [CmdletBinding()]
@@ -2860,7 +3168,367 @@ function Split-Words {
 
     return $Result.trim()
 }
+function Get-TextLengthPreview {
+<#
+    .SYNOPSIS
+        Get text length preview
+    .DESCRIPTION
+        Preview text with length number.
+    .EXAMPLE
+        Get-TextLengthPreview -Text $Text [-ShowUnprintableChars $ShowUnprintableChars] [-RemoveCR $RemoveCR]
+    .NOTES
+        AUTHOR  Alexk
+        CREATED 06.11.20
+        VER     1
+#>
+    [OutputType([PSObject])]
+    [CmdletBinding()]
+    param (
+        [Parameter( Mandatory = $true, Position = 0, HelpMessage = "Text array." )]
+        [ValidateNotNullOrEmpty()]
+        [string[]] $Text,
+        [Parameter( Mandatory = $false, Position = 1, HelpMessage = "Show unprintable characters." )]
+        [switch] $ShowUnprintableChars,
+        [Parameter( Mandatory = $false, Position = 2, HelpMessage = "Remove Cr char." )]
+        [switch] $RemoveCR
+    )
 
+    $NewText = @()
+    $MaxLineLen = 0
+    $AddNewLine = $false
+
+    if ( @($Text.Count) -eq 1 ){
+        $AddNewLine = $true
+        $SplittedText = $Text[0].split("`n")
+    }
+    Else {
+        $SplittedText = $Text
+    }
+
+    foreach ( $line in $SplittedText ){
+        if ( $AddNewLine ){
+            $line = $line.replace("`n","")
+        }
+        if ( $RemoveCR ){
+            $line = $line.replace("`r","")
+        }
+        if ( $ShowUnprintableChars ){
+            if ( $line ){
+                $line = Show-UnprintableChars -String $line
+            }
+        }
+        $PSO = [PSCustomObject]@{
+            Length = $line.Length
+            Text   = $line
+        }
+        $NewText += $PSO
+    }
+
+    return $NewText
+}
+function Show-UnprintableChars {
+<#
+    .SYNOPSIS
+        Show unprintable chars
+    .DESCRIPTION
+        Replace ASCII unprintable characters with their names.
+    .EXAMPLE
+        Show-UnprintableChars -String $String [-HTMLCodes $HTMLCodes] [-Dec $Dec] [-Hex $Hex]
+    .NOTES
+        AUTHOR  Alexk
+        CREATED 06.11.20
+        VER     1
+#>
+    [OutputType([String])]
+    [CmdletBinding()]
+    param (
+        [Parameter( Mandatory = $true, Position = 0, HelpMessage = "Text string." )]
+        [ValidateNotNullOrEmpty()]
+        [string[]] $String,
+        [Parameter( Mandatory = $false, Position = 1, HelpMessage = "Show HTML codes." )]
+        [switch] $HTMLCodes,
+        [Parameter( Mandatory = $false, Position = 1, HelpMessage = "Show decimal numbers." )]
+        [switch] $Dec,
+        [Parameter( Mandatory = $false, Position = 1, HelpMessage = "Show hex numbers." )]
+        [switch] $Hex
+
+    )
+
+    if ( !$HTMLCodes -and !$Dec -and !$Hex ){
+        $ASCIITable = import-csv -path "$($Global:gsHelpers)\$Global:gsDATAFolder\ASCII table.csv"
+    }
+    [int[]] $ASCIICodeArray = @()
+
+    foreach ( $Char in $string.ToCharArray() ){
+        $ASCIICodeArray += [int][char]$Char
+    }
+
+    $NewString = ""
+    foreach ( $item in (0..($ASCIICodeArray.count - 1)) ){
+        $Decimal = $ASCIICodeArray[$item]
+        if ( $Dec ){
+            $NewString += "`'" + $Decimal + "`'"
+        }
+        ElseIf ( $Hex ){
+            $NewString += "`'" + ($Decimal).ToString("X") + "`'"
+        }
+        ElseIf ( $HTMLCodes ) {
+            if ( $Decimal -ge 32 ){
+                $NewString += "`'&#" + ($Decimal).ToString("X") + ";`'"
+            }
+        }
+        if ( ($Decimal -le 32) -or ($Decimal -eq 34) -or ($Decimal -eq 127) ) {
+            $NewString += "`'" + ($ASCIITable | Where-Object {$_.dec -eq $Decimal}).char + "`'"
+        }
+        Else{
+            if ( $Decimal -le 127 ){
+                $NewString += ($ASCIITable | Where-Object {$_.dec -eq $Decimal}).char
+            }
+            Else {
+                $NewString += [char][int]$item
+            }
+        }
+    }
+    return $NewString
+}
+function Export-RegistryToFile {
+<#
+    .SYNOPSIS
+        Export registry to file
+    .DESCRIPTION
+        Export registry fields to the file.
+    .EXAMPLE
+        Export-RegistryToFile [-FilePath $FilePath] [-Path $Path] [-Property $Property]
+    .NOTES
+        AUTHOR  Alexk
+        CREATED 07.12.20
+        VER     1
+#>
+    [CmdletBinding()]
+    Param (
+        [string] $FilePath,
+        [string] $Path,
+        [string] $Property
+    )
+
+    if ( $FilePath ) {
+        $Export = $Path.replace(':','')
+        $ExportFind = ($Export.split("\") | Select-Object -skip 1) -join "\"
+        if ( Test-path -path $FilePath ){
+            $TmpFilePath = "$([Environment]::ExpandEnvironmentVariables($env:TEMP))\tmp_reg.reg"
+            & reg export $Export $TmpFilePath
+            $Content = Get-Content $TmpFilePath | Where-Object { $_ -ne 'Windows Registry Editor Version 5.00' -and  (($_ -like "*$ExportFind]*") -or ($_ -like "*`"$Property`"*")) }
+            $Content.trim() | Add-Content $FilePath
+            "`n"| Add-Content $FilePath
+            #write-host "$Content"
+            Remove-Item -path $TmpFilePath -Force
+        }
+        Else {
+            $TmpFilePath = "$([Environment]::ExpandEnvironmentVariables($env:TEMP))\tmp_reg.reg"
+            & reg export $Export $TmpFilePath
+            Get-Content $TmpFilePath | Where-Object {($_ -eq 'Windows Registry Editor Version 5.00') -or  ($_ -like "*$ExportFind]*") -or ($_ -like "*`"$Property`"*") -or ( $_ -eq "" ) }  | Set-Content $FilePath
+            Remove-Item -path $TmpFilePath -Force
+        }
+    }
+}
+function Show-ColoredTable {
+<#
+    .SYNOPSIS
+        Show colored table
+    .DESCRIPTION
+        Show table in color view.
+    .EXAMPLE
+        Parameter set: "Alerts"
+        Show-ColoredTable -Field $Field [-Data $Data] [-Definition $Definition] [-View $View] [-Title $Title]
+        Parameter set: "Color"
+        Show-ColoredTable [-Data $Data] [-View $View] [-Color $Color] [-Title $Title] [-AddRowNumbers $AddRowNumbers] [-PassThru $PassThru]
+    .NOTES
+        AUTHOR  Alexk
+        CREATED 02.12.20
+        VER     1
+#>
+    [CmdletBinding()]
+    Param (
+        [Parameter( Mandatory = $false, Position = 0, HelpMessage = "PsObject data." )]
+        [psObject[]] $Data,
+        [Parameter( Mandatory = $true, Position = 1, HelpMessage = "Field.", ParameterSetName = "Alerts" )]
+        [ValidateNotNullOrEmpty()]
+        [string] $Field,
+        [Parameter( Mandatory = $false, Position = 2, HelpMessage = "Color rules definition.", ParameterSetName = "Alerts" )]
+        [psObject] $Definition,
+        [Parameter( Mandatory = $false, Position = 3, HelpMessage = "Selected fields view." )]
+        $View,
+        [Parameter( Mandatory = $false, Position = 4, HelpMessage = "Change each line color.", ParameterSetName = "Color")]
+        [String[]] $Color,
+        [Parameter( Mandatory = $false, Position = 5, HelpMessage = "Table title.")]
+        [String] $Title,
+        [Parameter( Mandatory = $false, Position = 6, HelpMessage = "Add row numbers.", ParameterSetName = "Color" )]
+        [switch] $AddRowNumbers,
+        [Parameter( Mandatory = $false, Position = 7, HelpMessage = "Select message.")]
+        [string] $SelectField,
+        [Parameter( Mandatory = $false, Position = 8, HelpMessage = "Select message.")]
+        [string] $SelectMessage,
+        [Parameter( Mandatory = $false, Position = 9, HelpMessage = "Return object.", ParameterSetName = "Color" )]
+        [switch] $PassThru
+    )
+
+    If ( !$View ){
+        $View = "*"
+    }
+    $First = $true
+
+    if ( $Field ) {
+        if ( !$Definition ){
+            $Definition = [PSCustomObject]@{
+                Information = @{Field = "Information"; Color = "Green"}
+                Verbose     = @{Field = "Verbose"    ; Color = "Green"}
+                Error       = @{Field = "Error"      ; Color = "Red"}
+                Warning     = @{Field = "Warning"    ; Color = "Yellow"}
+            }
+        }
+
+        foreach ( $Item in $Data ){
+            switch ( $Item.$Field ) {
+                $Definition.Information.Field {
+                    if ( $First ) {
+                        write-host ""
+                        write-host "$(($Item | format-table -property $View -AutoSize | Out-String).trim() )" -ForegroundColor $Definition.Information.Color
+                        $First = $false
+                    }
+                    Else {
+                        write-host "$(($Item | format-table -property $View -AutoSize -HideTableHeaders | Out-String).trim() )" -ForegroundColor $Definition.Information.Color
+                    }
+                }
+                $Definition.Verbose.Field {
+                    if ( $First ) {
+                        write-host ""
+                        write-host "$(($Item | format-table -property $View -AutoSize | Out-String).trim() )" -ForegroundColor $Definition.Verbose.Color
+                        $First = $false
+                    }
+                    Else {
+                        write-host "$(($Item | format-table -property $View -AutoSize -HideTableHeaders | Out-String).trim() )" -ForegroundColor $Definition.Verbose.Color
+                    }
+                }
+                $Definition.Error.Field {
+                    if ( $First ) {
+                        write-host "$(($Item | format-table -property $View -AutoSize | Out-String).trim() )" -ForegroundColor $Definition.Error.Color
+                        $First = $false
+                    }
+                    Else {
+                        write-host "$(($Item | format-table -property $View -AutoSize -HideTableHeaders | Out-String).trim() )" -ForegroundColor $Definition.Error.Color
+                    }
+                }
+                $Definition.Warning.Field {
+                    if ( $First ) {
+                        write-host "$(($Item | format-table -property $View -AutoSize | Out-String).trim() )" -ForegroundColor $Definition.Warning.Color
+                        $First = $false
+                    }
+                    Else {
+                        write-host "$(($Item | format-table -property $View -AutoSize -HideTableHeaders | Out-String).trim() )" -ForegroundColor $Definition.Warning.Color
+                    }
+                }
+                Default {
+                    Write-host "$(($Item | format-table -property $View -AutoSize -HideTableHeaders | Out-String).trim() )" -ForegroundColor "White"
+                }
+            }
+        }
+    }
+    Else {
+        if ( $AddRowNumbers ){
+            $Counter = 1
+            $Result = @()
+            foreach ( $item in $Data ) {
+                $item | Add-Member -MemberType NoteProperty -Name "Num" -Value "$Counter"
+                $Result  += $item
+                $Counter ++
+            }
+            $NewView  = @("Num")
+            $NewView += $View
+            $Data = $Result
+            $View = $NewView
+        }
+
+        if ( !$Color ){
+            $Exclude   = "White", "Black", "Yellow", "Red"
+            $ColorList = [Enum]::GetValues([System.ConsoleColor])
+            $Basic     = $ColorList | where-object {$_ -notlike "Dark*"} | where-object {$_ -notin $Exclude}
+
+            $Pairs = @()
+            foreach ( $Item in $basic ){
+                $Pairs += ,@("$Item", "Dark$Item")
+            }
+
+            $ColorPair = , @($Pairs) | Get-Random
+            $Header    = $ColorList | where-object {$_ -notin $ColorPair} | get-random
+            $Color     = @($Header)
+            $Color    += $ColorPair
+        }
+        if ( $Title ){
+            write-host "$Title"  -ForegroundColor $Color[0] # ($($Color -join(",")))"
+            write-host ""
+        }
+
+        $Cnt        = 1
+        $FirstCnt   = 0
+        $ColorCount = $Color.Count - 1
+
+        $TableData  = ( $Data  | format-table -property $View -AutoSize | Out-String ).trim().split("`r")
+        foreach ( $line in $TableData ){
+            if ( $First ) {
+                write-host $line -ForegroundColor $Color[0] -NoNewLine
+                $FirstCnt ++
+                if ( $FirstCnt -gt 1 ){
+                    $First = $false
+                }
+            }
+            Else {
+                write-host $line -ForegroundColor $Color[$Cnt] -NoNewLine
+            }
+
+            if ( $Cnt -lt $ColorCount){
+                $Cnt++
+            }
+            Else {
+                $Cnt = 1
+            }
+        }
+
+        write-host ""
+    }
+
+    if ( $SelectMessage ){
+        Write-host ""
+        Write-Host $SelectMessage -NoNewline -ForegroundColor $Color[0]
+        $Selected       = Read-Host
+        $SelectedNum    = Convert-StringToDigitArray -UserInput $Selected -DataSize $Data.count
+        $SelectedFields = ($Data | Where-Object { ($Data.IndexOf($_) + 1) -in $SelectedNum }).$SelectField
+        $SelectedArray  = $Data | Where-Object { $_.$SelectField -in $SelectedFields }
+        Write-Host ""
+        write-host "Selected items: " -ForegroundColor $Color[0]
+
+        $Cnt        = 1
+        $ColorCount = $Color.Count - 1
+
+        $TableData  = ( $SelectedArray  | format-table -property $View -AutoSize | Out-String ).trim().split("`r")
+        foreach ( $line in $TableData ){
+            write-host $line -ForegroundColor $Color[$Cnt] -NoNewLine
+
+            if ( $Cnt -lt $ColorCount){
+                $Cnt++
+            }
+            Else {
+                $Cnt = 1
+            }
+        }
+
+        return $SelectedArray
+    }
+    Else {
+        if ( $PassThru ){
+            return $Result
+        }
+    }
+}
 #endregion
 #region Dialog
 Function Show-OpenDialog{
@@ -2871,6 +3539,10 @@ Function Show-OpenDialog{
         Show windows open file dialog.
     .EXAMPLE
         Show-OpenDialog -Type $Type [-InitPath $InitPath] [-Description $Description] [-FileFilter $FileFilter] [-FileMultiSelect $FileMultiSelect]
+    .NOTES
+        AUTHOR  Alexk
+        CREATED 05.11.20
+        VER     1
 #>
     [CmdletBinding()]
     Param(
@@ -2919,6 +3591,10 @@ Function Show-Notification {
         Function to show notification in the system tray.
     .EXAMPLE
         Show-Notification -MsgTitle $MsgTitle -MsgText $MsgText -Status $Status [-FilePath $FilePath=""] [-Timeout $Timeout=5]
+    .NOTES
+        AUTHOR  Alexk
+        CREATED 05.11.20
+        VER     1
 #>
     [CmdletBinding()]
     param (
@@ -2982,6 +3658,10 @@ function Get-SettingsFromFile {
         Load variables from external file.
     .EXAMPLE
         Get-SettingsFromFile -SettingsFile $SettingsFile
+    .NOTES
+        AUTHOR  Alexk
+        CREATED 05.11.20
+        VER     1
 #>
     [CmdletBinding()]
     Param(
@@ -3005,6 +3685,10 @@ function Get-ErrorReporting {
         Visualize errors and save it to file.
     .EXAMPLE
         Get-ErrorReporting -Trap $Trap
+    .NOTES
+        AUTHOR  Alexk
+        CREATED 05.11.20
+        VER     1
 #>
     [CmdletBinding()]
     Param(
@@ -3126,7 +3810,7 @@ function Get-ErrorReporting {
 # }
 #>
 
-Export-ModuleMember -Function Get-NewAESKey, Get-VarFromAESFile, Set-VarToAESFile, Disconnect-VPN, Connect-VPN, Add-ToLog, Restart-Switches, Restart-SwitchInInterval, Get-EventList, Send-Email, Start-PSScript, Restart-LocalHostInInterval, Show-Notification, Restart-ServiceInInterval, New-TelegramMessage, Get-SettingsFromFile, Get-HTMLTable, Get-HTMLCol, Get-ContentFromHTMLTemplate, Get-ErrorReporting, Get-CopyByBITS, Show-OpenDialog, Import-ModuleRemotely, Invoke-PSScriptBlock, Get-ACLArray, Set-PSModuleManifest, Get-VarToString, Get-UniqueArrayMembers, Resolve-IPtoFQDNinArray, Get-HelpersData, Get-DifferenceBetweenArrays, Test-Credentials, Convert-FSPath, Start-Program, Test-ElevatedRights, Invoke-CommandWithDebug, Format-TimeSpan, Start-ParallelPortPing, Join-Array, Set-State, Send-Alert, Start-Module, Convert-SpecialCharacters, Get-ListByGroups, Convert-StringToDigitArray, Invoke-TrailerIncrease, Split-words
+Export-ModuleMember -Function Get-NewAESKey, Get-VarFromAESFile, Set-VarToAESFile, Disconnect-VPN, Connect-VPN, Add-ToLog, Restart-Switches, Restart-SwitchInInterval, Get-EventList, Send-Email, Start-PSScript, Restart-LocalHostInInterval, Show-Notification, Restart-ServiceInInterval, New-TelegramMessage, Get-SettingsFromFile, Get-HTMLTable, Get-HTMLCol, Get-ContentFromHTMLTemplate, Get-ErrorReporting, Get-CopyByBITS, Show-OpenDialog, Import-ModuleRemotely, Invoke-PSScriptBlock, Get-ACLArray, Set-PSModuleManifest, Get-VarToString, Get-UniqueArrayMembers, Resolve-IPtoFQDNinArray, Get-HelpersData, Get-DifferenceBetweenArrays, Test-Credentials, Convert-FSPath, Start-Program, Test-ElevatedRights, Invoke-CommandWithDebug, Format-TimeSpan, Start-ParallelPortPing, Join-Array, Set-State, Send-Alert, Start-Module, Convert-SpecialCharacters, Get-ListByGroups, Convert-StringToDigitArray, Invoke-TrailerIncrease, Split-words, Remove-Modules, Get-TextLengthPreview, Export-RegistryToFile, Show-ColoredTable
 
 <#
 

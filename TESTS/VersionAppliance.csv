@@ -1,3 +1,4 @@
 "Hash","Author","Date","Modified","Message","ModuleMetaData","HelpContent"
 "06a7e004f446f5221f692a3c31247c1ced2f4d41","AlexK <1928311@tuta.io>","Thu Oct 1 23:32:08 2020 +0300","AlexkUtils.psm1","Add Convert-SpecialCharacters.","True","True"
 "845a382998776d9b2917feb1444f1cff53b2723c","AlexK <1928311@tuta.io>","Sun Nov 1 18:56:04 2020 +0300",".gitignore; AlexkUtils.psd1; AlexkUtils.psm1; TESTS/AlexkUtils.tests.ps1; TESTS/VersionAppliance.csv; TESTS/functions.csv","Test commit.","","True"
+"37cfaebed16e3e65692014b93b7595a57403b7a7","AlexK","Sun Nov 1 21:50:39 2020 +0300","AlexkUtils.psd1; AlexkUtils.psm1; TESTS/VersionAppliance.csv; TESTS/functions.csv","Test commit","True","True"

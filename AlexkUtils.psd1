@@ -69,22 +69,7 @@ PowerShellVersion = '4.0'
 # NestedModules = @()
 
 # Functions to export from this module, for best performance, do not use wildcards and do not delete the entry, use an empty array if there are no functions to export.
-FunctionsToExport = 'Get-ContentFromHTMLTemplate', 'Get-HTMLTable', 'Disconnect-VPN', 
-               'Connect-VPN', 'Add-ToLog', 'Import-ModuleRemotely', 
-               'Get-ErrorReporting', 'Get-VarFromAESFile', 'Start-Module', 
-               'Restart-ServiceInInterval', 'Show-Notification', 'Format-TimeSpan', 
-               'Restart-Switches', 'Set-State', 'Show-OpenDialog', 
-               'Convert-SpecialCharacters', 'Get-VarToString', 'Test-ElevatedRights', 
-               'Restart-SwitchInInterval', 'Invoke-PSScriptBlock', 
-               'Restart-LocalHostInInterval', 'Split-Words', 'Start-Program', 
-               'Send-Email', 'Get-SettingsFromFile', 'Invoke-CommandWithDebug', 
-               'New-TelegramMessage', 'Send-Alert', 'Invoke-TrailerIncrease', 
-               'Start-ParallelPortPing', 'Set-VarToAESFile', 'Get-ListByGroups', 
-               'Convert-FSPath', 'Test-Credentials', 'Get-ACLArray', 
-               'Get-UniqueArrayMembers', 'Get-NewAESKey', 'Start-PSScript', 
-               'Get-EventList', 'Resolve-IPtoFQDNinArray', 'Join-Array', 
-               'Get-CopyByBITS', 'Get-HTMLCol', 'Get-DifferenceBetweenArrays', 
-               'Convert-StringToDigitArray', 'Get-HelpersData'
+FunctionsToExport = '*'
 
 # Cmdlets to export from this module, for best performance, do not use wildcards and do not delete the entry, use an empty array if there are no cmdlets to export.
 CmdletsToExport = '*'
@@ -116,7 +101,7 @@ PrivateData = @{
         # LicenseUri = ''
 
         # A URL to the main website for this project.
-        # ProjectUri = ''
+        ProjectUri = 'https://github.com/Alex-0293/AlexKUtils.git'
 
         # A URL to an icon representing this module.
         # IconUri = ''
