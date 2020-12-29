@@ -1099,6 +1099,7 @@ Function New-TelegramMessage {
             [string]    $logFilePath,
             [string]    $Message
         )
+        #Start-Transcript -Path "C:\DATA\trans.log"
         Import-Module -name AlexkUtils
 
         $WebRequestSuccess = $null
@@ -1106,12 +1107,14 @@ Function New-TelegramMessage {
         $Interval          = New-TimeSpan -Start $Start
 
         while ((-not $WebRequestSuccess) -and ($Interval -lt $TTL)) {
-
             try {
                 $Response = Invoke-RestMethod -Uri $URI
                 switch ($Response.ok) {
-                   $true {
+                    $true {
                         $WebRequestSuccess = $True
+                    }
+                    $false {
+                        Add-ToLog -Message "Error[$($Response.error_code)][$($Response.description)]" -logFilePath $logFilePath -Status "Error"
                     }
                     Default {
                         Start-Sleep -Seconds $PauseBetweenTries
@@ -1123,7 +1126,8 @@ Function New-TelegramMessage {
                 Add-ToLog -Message "$Message [$_]" -logFilePath $logFilePath -Status "Error"
                 Start-Sleep -Seconds $PauseBetweenTries
             }
-            $Interval          = New-TimeSpan -Start $Start
+            $Interval = New-TimeSpan -Start $Start
+            #stop-Transcript
         }
     }
 
@@ -1967,7 +1971,7 @@ Function Start-Program {
     #$ProcessInfo.RedirectStandardOutput = $true
     $ProcessInfo.CreateNoWindow         = $true
 
-    $Message               = "User [$($RunningCredentials.Name)]. Starting program [$Program]"
+    $Message               = "User [$([System.Security.Principal.WindowsIdentity]::GetCurrent().Name)]. Starting program [$Program]"
 
     if($Credentials){
         if ($RunningCredentials.name -ne $Credentials.UserName) {
@@ -3368,11 +3372,15 @@ function Show-ColoredTable {
         [string] $SelectField,
         [Parameter( Mandatory = $false, Position = 8, HelpMessage = "Select message.")]
         [string] $SelectMessage,
+        [Parameter( Mandatory = $false, Position = 8, HelpMessage = "Allow only not null results.")]
+        [switch] $NotNull,
         [Parameter( Mandatory = $false, Position = 9, HelpMessage = "Add new line at the end.", ParameterSetName = "Color" )]
         [switch] $AddNewLine,
         [Parameter( Mandatory = $false, Position = 10, HelpMessage = "Return object.", ParameterSetName = "Color" )]
         [switch] $PassThru
     )
+
+    Write-Host "============================="
 
     If ( !$View ){
         $View = "*"
@@ -3499,31 +3507,42 @@ function Show-ColoredTable {
     }
 
     if ( $SelectMessage ){
-        Write-host ""
-        Write-Host $SelectMessage -NoNewline -ForegroundColor $Color[0]
-        $Selected       = Read-Host
-        $SelectedNum    = Convert-StringToDigitArray -UserInput $Selected -DataSize $Data.count
-        $SelectedFields = ($Data | Where-Object { ($Data.IndexOf($_) + 1) -in $SelectedNum }).$SelectField
-        $SelectedArray  = $Data | Where-Object { $_.$SelectField -in $SelectedFields }
-        Write-Host ""
-        write-host "Selected items: " -ForegroundColor $Color[0]
+        while ( (!$SelectedArray) ){
+            Write-host ""        
+            Write-Host $SelectMessage -NoNewline -ForegroundColor $Color[0]
+            $Selected       = Read-Host
+            $SelectedNum    = Convert-StringToDigitArray -UserInput $Selected -DataSize $Data.count
+            $SelectedFields = ($Data | Where-Object { ($Data.IndexOf($_) + 1) -in $SelectedNum }).$SelectField
+            $SelectedArray  = $Data | Where-Object { $_.$SelectField -in $SelectedFields }
+            Write-Host ""
+            write-host "Selected items: " -ForegroundColor $Color[0]
 
-        $Cnt        = 1
-        $ColorCount = $Color.Count - 1
+            $Cnt        = 1
+            $ColorCount = $Color.Count - 1
 
-        $TableData  = ( $SelectedArray  | format-table -property $View -AutoSize | Out-String ).trim().split("`r")
-        foreach ( $line in $TableData ){
-            write-host $line -ForegroundColor $Color[$Cnt] -NoNewLine
+            $TableData  = ( $SelectedArray  | format-table -property $View -AutoSize | Out-String ).trim().split("`r")
+            foreach ( $line in $TableData ){
+                write-host $line -ForegroundColor $Color[$Cnt] -NoNewLine
 
-            if ( $Cnt -lt $ColorCount){
-                $Cnt++
+                if ( $Cnt -lt $ColorCount){
+                    $Cnt++
+                }
+                Else {
+                    $Cnt = 1
+                }
             }
-            Else {
-                $Cnt = 1
+            if ( $AddNewLine ){
+                Write-host ""
             }
-        }
-        if ( $AddNewLine ){
-            Write-host ""
+
+            if ( !$NotNull ){
+                return $SelectedArray
+            }
+            else {
+                if ( $null -eq $SelectedArray ){
+                    write-host "Choose correct option!" -ForegroundColor red
+                }
+            }
         }
 
         return $SelectedArray
@@ -3562,12 +3581,14 @@ Function Get-Answer {
         [Parameter(Mandatory = $false, Position = 3, HelpMessage = "Two view colors." )]
         [String[]] $Color,
         [Parameter(Mandatory = $false, Position = 4, HelpMessage = "Add new line at the end." )]
-        [Switch] $AddNewLine
+        [Switch] $AddNewLine,
+        [Parameter(Mandatory = $false, Position = 4, HelpMessage = "Read as secure string." )]
+        [Switch] $AsSecureString
     )
     $Res = $null
 
     write-host ""
-
+    write-host "============================="
     if ( $ChooseFrom ) {
         $OptionSeparator = "/"
         $ChoseFromString = ""
@@ -3614,7 +3635,13 @@ Function Get-Answer {
     }
     Else {
         write-host -object $Title -ForegroundColor $Color[0] -NoNewline
-        $res = Read-Host
+        if ( $AsSecureString ){
+            $res = Read-Host -AsSecureString
+        }
+        Else {
+            $res = Read-Host
+        }
+        
     }
 
     write-host -object "Selected: " -ForegroundColor $Color[0] -NoNewline
