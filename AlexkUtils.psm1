@@ -1747,7 +1747,7 @@ function Invoke-PSScriptBlock {
         Function to automate remote PS session or execute scripts locally
     .EXAMPLE
         Parameter set: "Remote"
-        Invoke-PSScriptBlock -ScriptBlock $ScriptBlock [-Computer $Computer] [-Credentials $Credentials] [-ImportLocalModule $ImportLocalModule] [-TestComputer $TestComputer] [-ExportedParameters $ExportedParameters] [-SessionOptions $SessionOptions] [-NewSession $NewSession]
+        Invoke-PSScriptBlock -ScriptBlock $ScriptBlock [-Computer $Computer] [-Credentials $Credentials] [-ImportLocalModule $ImportLocalModule] [-TestComputer $TestComputer] [-ExportedParameters $ExportedParameters] [-SessionOptions $SessionOptions] [-NewSession $NewSession] [-DebugSession $DebugSession]
     .NOTES
         AUTHOR  Alexk
         CREATED 05.11.20
@@ -1885,7 +1885,7 @@ function Invoke-PSScriptBlock {
             if ( $FirstString -notlike "*param*(*)*" ) {
                 $ScriptBlockWithExportedParams = $NewStrings + $ScriptBlockWithExportedParams
             }
-            
+
             if ( $DebugSession ){
                 $AttachDebugger = '
                     Set-PSBreakpoint -Variable "Params"
@@ -3339,9 +3339,9 @@ function Show-ColoredTable {
         Show table in color view.
     .EXAMPLE
         Parameter set: "Alerts"
-        Show-ColoredTable -Field $Field [-Data $Data] [-Definition $Definition] [-View $View] [-Title $Title]
+        Show-ColoredTable -Field $Field [-Data $Data] [-Definition $Definition] [-View $View] [-Title $Title] [-SelectField $SelectField] [-SelectMessage $SelectMessage]
         Parameter set: "Color"
-        Show-ColoredTable [-Data $Data] [-View $View] [-Color $Color] [-Title $Title] [-AddRowNumbers $AddRowNumbers] [-PassThru $PassThru]
+        Show-ColoredTable [-Data $Data] [-View $View] [-Color $Color] [-Title $Title] [-AddRowNumbers $AddRowNumbers] [-SelectField $SelectField] [-SelectMessage $SelectMessage] [-PassThru $PassThru]
     .NOTES
         AUTHOR  Alexk
         CREATED 02.12.20
@@ -3368,7 +3368,9 @@ function Show-ColoredTable {
         [string] $SelectField,
         [Parameter( Mandatory = $false, Position = 8, HelpMessage = "Select message.")]
         [string] $SelectMessage,
-        [Parameter( Mandatory = $false, Position = 9, HelpMessage = "Return object.", ParameterSetName = "Color" )]
+        [Parameter( Mandatory = $false, Position = 9, HelpMessage = "Add new line at the end.", ParameterSetName = "Color" )]
+        [switch] $AddNewLine,
+        [Parameter( Mandatory = $false, Position = 10, HelpMessage = "Return object.", ParameterSetName = "Color" )]
         [switch] $PassThru
     )
 
@@ -3520,14 +3522,110 @@ function Show-ColoredTable {
                 $Cnt = 1
             }
         }
+        if ( $AddNewLine ){
+            Write-host ""
+        }
 
         return $SelectedArray
     }
     Else {
+        if ( $AddNewLine ){
+            Write-host ""
+        }
         if ( $PassThru ){
             return $Result
         }
     }
+}
+Function Get-Answer {
+<#
+    .SYNOPSIS
+        Get answer
+    .DESCRIPTION
+        Colored read host with features.
+    .EXAMPLE
+        Get-Answer -Title $Title [-ChooseFrom $ChooseFrom] [-DefaultChoose $DefaultChoose] [-Color $Color]
+    .NOTES
+        AUTHOR  Alexk
+        CREATED 26.12.20
+        VER     1
+#>
+    [CmdletBinding()]
+    param (
+        [Parameter(Mandatory = $True, Position = 0, HelpMessage = "Title message." )]
+        [ValidateNotNullOrEmpty()]
+        [string] $Title,
+        [Parameter(Mandatory = $false, Position = 1, HelpMessage = "Choose from list." )]
+        [string[]] $ChooseFrom,
+        [Parameter(Mandatory = $false, Position = 2, HelpMessage = "Default option." )]
+        [string] $DefaultChoose,
+        [Parameter(Mandatory = $false, Position = 3, HelpMessage = "Two view colors." )]
+        [String[]] $Color,
+        [Parameter(Mandatory = $false, Position = 4, HelpMessage = "Add new line at the end." )]
+        [Switch] $AddNewLine
+    )
+    $Res = $null
+
+    write-host ""
+
+    if ( $ChooseFrom ) {
+        $OptionSeparator = "/"
+        $ChoseFromString = ""
+
+        foreach ( $item in $ChooseFrom ) {
+            if ( $item.toupper() -ne $DefaultChoose.toupper() ){
+                $ChoseFromString += "$($item.toupper())$OptionSeparator"
+            }
+            Else {
+                $ChoseFromString += "($($item.toupper()))$OptionSeparator"
+            }
+        }
+
+        $ChoseFromString = $ChoseFromString.Substring(0,($ChoseFromString.Length-$OptionSeparator.Length))
+
+        $Message = "$Title [$ChoseFromString]"
+
+        $ChooseFromUpper = @()
+        foreach ( $item in $ChooseFrom ){
+            $ChooseFromUpper += $item.ToUpper()
+        }
+        if ( $DefaultChoose ){
+            $ChooseFromUpper += ""
+        }
+
+        while ( $res -notin $ChooseFromUpper ) {
+            if ( $Color ) {
+                write-host -object "$Title[" -ForegroundColor $Color[0] -NoNewline
+                write-host -object "$ChoseFromString" -ForegroundColor $Color[1] -NoNewline
+                write-host -object "]" -ForegroundColor $Color[0] -NoNewline
+            }
+            Else {
+                write-host -object $Message -NoNewline
+            }
+            $res = Read-Host
+            if ( $DefaultChoose ){
+                if ( $res -eq "" ) {
+                    $res = $DefaultChoose
+                }
+            }
+
+            $res = $res.ToUpper()
+        }
+    }
+    Else {
+        write-host -object $Title -ForegroundColor $Color[0] -NoNewline
+        $res = Read-Host
+    }
+
+    write-host -object "Selected: " -ForegroundColor $Color[0] -NoNewline
+    write-host -object "$res" -ForegroundColor $Color[1] -NoNewline
+
+    if ( $AddNewLine ){
+        Write-host ""
+    }
+
+    return $Res
+
 }
 #endregion
 #region Dialog
@@ -3810,7 +3908,7 @@ function Get-ErrorReporting {
 # }
 #>
 
-Export-ModuleMember -Function Get-NewAESKey, Get-VarFromAESFile, Set-VarToAESFile, Disconnect-VPN, Connect-VPN, Add-ToLog, Restart-Switches, Restart-SwitchInInterval, Get-EventList, Send-Email, Start-PSScript, Restart-LocalHostInInterval, Show-Notification, Restart-ServiceInInterval, New-TelegramMessage, Get-SettingsFromFile, Get-HTMLTable, Get-HTMLCol, Get-ContentFromHTMLTemplate, Get-ErrorReporting, Get-CopyByBITS, Show-OpenDialog, Import-ModuleRemotely, Invoke-PSScriptBlock, Get-ACLArray, Set-PSModuleManifest, Get-VarToString, Get-UniqueArrayMembers, Resolve-IPtoFQDNinArray, Get-HelpersData, Get-DifferenceBetweenArrays, Test-Credentials, Convert-FSPath, Start-Program, Test-ElevatedRights, Invoke-CommandWithDebug, Format-TimeSpan, Start-ParallelPortPing, Join-Array, Set-State, Send-Alert, Start-Module, Convert-SpecialCharacters, Get-ListByGroups, Convert-StringToDigitArray, Invoke-TrailerIncrease, Split-words, Remove-Modules, Get-TextLengthPreview, Export-RegistryToFile, Show-ColoredTable
+Export-ModuleMember -Function Get-NewAESKey, Get-VarFromAESFile, Set-VarToAESFile, Disconnect-VPN, Connect-VPN, Add-ToLog, Restart-Switches, Restart-SwitchInInterval, Get-EventList, Send-Email, Start-PSScript, Restart-LocalHostInInterval, Show-Notification, Restart-ServiceInInterval, New-TelegramMessage, Get-SettingsFromFile, Get-HTMLTable, Get-HTMLCol, Get-ContentFromHTMLTemplate, Get-ErrorReporting, Get-CopyByBITS, Show-OpenDialog, Import-ModuleRemotely, Invoke-PSScriptBlock, Get-ACLArray, Set-PSModuleManifest, Get-VarToString, Get-UniqueArrayMembers, Resolve-IPtoFQDNinArray, Get-HelpersData, Get-DifferenceBetweenArrays, Test-Credentials, Convert-FSPath, Start-Program, Test-ElevatedRights, Invoke-CommandWithDebug, Format-TimeSpan, Start-ParallelPortPing, Join-Array, Set-State, Send-Alert, Start-Module, Convert-SpecialCharacters, Get-ListByGroups, Convert-StringToDigitArray, Invoke-TrailerIncrease, Split-words, Remove-Modules, Get-TextLengthPreview, Export-RegistryToFile, Show-ColoredTable, Get-Answer
 
 <#
 
