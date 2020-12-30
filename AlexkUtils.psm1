@@ -70,13 +70,17 @@ Function Get-VarFromAESFile  {
     [CmdletBinding()]
     param
     (
-        [Parameter(Mandatory = $true, Position = 0, HelpMessage = "Path to AES key file." )]
+        [Parameter(Mandatory = $false, Position = 0, HelpMessage = "Path to AES key file." )]
         [ValidateNotNullOrEmpty()]
         [string]$AESKeyFilePath,
         [Parameter(Mandatory=$true, Position=1, HelpMessage = "Encrypted file path." )]
         [ValidateNotNullOrEmpty()]
         [string]$VarFilePath
     )
+
+    if ( !$AESKeyFilePath ){
+        $AESKeyFilePath = Get-Content -path $VarFilePath -Stream "Key.Path"
+    } 
 
     if (!(test-path $AESKeyFilePath)) {
         write-host "AESKeyFilePath [$AESKeyFilePath] not exist" -ForegroundColor Red
@@ -85,7 +89,7 @@ Function Get-VarFromAESFile  {
     else { $AESKeyFilePathExist = $true }
 
     if (!(test-path $VarFilePath)) {
-        write-host "VarFilePath not exist" -ForegroundColor Red
+        Write-Host "VarFilePath [$VarFilePath] not exist" -ForegroundColor Red
         $VarFilePathExist = $false
     }
     else { $VarFilePathExist = $true }
@@ -762,7 +766,7 @@ Function Send-Alert {
     .DESCRIPTION
         Send alert by custom transport.
     .EXAMPLE
-        Send-Alert -AlertParameters $AlertParameters -AlertMessage $AlertMessage [-AlertSubject $AlertSubject]
+        Send-Alert -AlertParameters $Plugin -AlertMessage $AlertMessage [-AlertSubject $AlertSubject]
     .NOTES
         AUTHOR  Alexk
         CREATED 05.11.20
@@ -771,21 +775,21 @@ Function Send-Alert {
     [CmdletBinding()]
     Param (
         [Parameter( Mandatory = $True, Position = 1, HelpMessage = "Alert parameters.")]
-        $AlertParameters,
+        $Plugin,
         [Parameter( Mandatory = $True, Position = 2, HelpMessage = "Alert message.")]
         [string] $AlertMessage,
         [Parameter( Mandatory = $false, Position = 3, HelpMessage = "Alert subject.")]
         [string] $AlertSubject
     )
-    switch ([string]$AlertParameters.name.ToLower()) {
+
+    $PluginSettings = $Plugin.Settings
+    
+    switch ([string]$Plugin.name.ToLower()) {
         "telegram" {
-            $Data = $AlertParameters.data
-            New-TelegramMessage @Data -Message $AlertMessage
+            New-TelegramMessage @PluginSettings -Message $AlertMessage
         }
         "email" {
-            $Data = $AlertParameters.data
-            Send-Email @Data -SSL -Subject $AlertSubject -Body $AlertMessage
-
+            Send-Email @PluginSettings -SSL -Subject $AlertSubject -Body $AlertMessage
         }
         Default {}
     }
@@ -843,7 +847,7 @@ Global state: $($StateObject.GlobalState)
             switch ($AlertType.ToLower()) {
                 "telegram" {
                     if ($Global:TelegramParameters) {
-                        Send-Alert -AlertParameters $Global:TelegramParameters -AlertMessage $AlertMessage
+                        Send-Alert -AlertParameters $Global:gsPlugins.SelectPlugin("telegram") -AlertMessage $AlertMessage
                         Add-ToLog -Message "Sent telegram message." -logFilePath $Global:gsScriptLogFilePath -Display -Status "Info"
                     }
                     Else {
@@ -858,7 +862,7 @@ Global state: $($StateObject.GlobalState)
         switch ($AlertType.ToLower()) {
             "telegram" {
                 if ($Global:TelegramParameters) {
-                    Send-Alert -AlertParameters $Global:TelegramParameters -AlertMessage $AlertMessage
+                    Send-Alert -AlertParameters $Global:gsPlugins.SelectPlugin("telegram") -AlertMessage $AlertMessage
                 }
                 Else {
                     Add-ToLog -Message "Telegram parameters not set! Plugin not available" -logFilePath $Global:gsScriptLogFilePath -Display -Status "Error"
@@ -3510,7 +3514,13 @@ function Show-ColoredTable {
         while ( (!$SelectedArray) ){
             Write-host ""        
             Write-Host $SelectMessage -NoNewline -ForegroundColor $Color[0]
-            $Selected       = Read-Host
+            while( !$Selected ){
+                $Selected       = Read-Host
+                if ( !$Selected ){
+                    write-host "Select correct number!" -ForegroundColor red
+                }
+            }
+            
             $SelectedNum    = Convert-StringToDigitArray -UserInput $Selected -DataSize $Data.count
             $SelectedFields = ($Data | Where-Object { ($Data.IndexOf($_) + 1) -in $SelectedNum }).$SelectField
             $SelectedArray  = $Data | Where-Object { $_.$SelectField -in $SelectedFields }
