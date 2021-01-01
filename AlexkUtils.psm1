@@ -71,7 +71,6 @@ Function Get-VarFromAESFile  {
     param
     (
         [Parameter(Mandatory = $false, Position = 0, HelpMessage = "Path to AES key file." )]
-        [ValidateNotNullOrEmpty()]
         [string]$AESKeyFilePath,
         [Parameter(Mandatory=$true, Position=1, HelpMessage = "Encrypted file path." )]
         [ValidateNotNullOrEmpty()]
@@ -129,19 +128,61 @@ Function Set-VarToAESFile {
     (
         [Parameter(Mandatory = $true, Position = 0, HelpMessage = "Value." )]
         [ValidateNotNullOrEmpty()]
-        [string] $Var,
+        $Var,
         [Parameter(Mandatory = $true, Position = 1, HelpMessage = "Path to AES key file." )]
         [ValidateNotNullOrEmpty()]
         [string] $AESKeyFilePath,
         [Parameter(Mandatory = $true, Position = 2, HelpMessage = "Path to encrypted file." )]
         [ValidateNotNullOrEmpty()]
         [string] $VarFilePath,
-        [Parameter(Mandatory = $false, Position = 3, HelpMessage = "Return object." )]
+        [Parameter(Mandatory = $false, Position = 4, HelpMessage = "Force overwrite file." )]
+        [switch] $Force,
+        [Parameter(Mandatory = $false, Position = 5, HelpMessage = "Return object." )]
         [switch] $PassThru
     )
 
-    $AESData = ConvertTo-SecureString -String $Var -AsPlainText | ConvertFrom-SecureString -Key (get-content $AESKeyFilePath)
-    $AESData | Set-Content -path $VarFilePath
+    function Set-AESContent ([string] $VarFilePath, [string] $AESKeyFilePath) {
+        if ( test-path -path $AESKeyFilePath ){
+            $AESData | Set-Content -path $VarFilePath
+            Set-Content -Path $VarFilePath -Value $AESKeyFilePath -Stream "Key.Path"
+        }
+        Else {
+            Write-host "AES key file [$AESKeyFilePath] not found!" -ForegroundColor Red
+            $AESData = $Null
+        }
+
+        Return $AESData
+    }
+
+    if ( $Var.GetType().name -eq "PSCustomObject" ) {
+        $Var = $Var | ConvertTo-Json -Compress
+    }
+
+    if ( $Var.GetType().name -ne "SecureString" ) {
+            $AESData = ConvertTo-SecureString -String $Var -AsPlainText | ConvertFrom-SecureString -Key (get-content $AESKeyFilePath)
+    }
+    else {
+        $AESData = $Var
+    }
+
+    if ( !(test-path -path $VarFilePath) ) {
+        $AESData = Set-AESContent -VarFilePath $VarFilePath -AESKeyFilePath $AESKeyFilePath
+    }
+    Else{
+        if ( $Force ) {
+            $AESData = Set-AESContent -VarFilePath $VarFilePath -AESKeyFilePath $AESKeyFilePath
+        }
+        Else {
+            $Answer = Get-Answer -Title "File [$VarFilePath], already exist! Do you want to replace it? " -ChooseFrom "y", "n" -DefaultChoose "n" -Color "Cyan", "DarkMagenta" -AddNewLine 
+            if ( $Answer -eq "Y" ){
+                $AESData = Set-AESContent -VarFilePath $VarFilePath -AESKeyFilePath $AESKeyFilePath
+            }
+            Else {
+                Write-host "AES file [$VarFilePath] overwrite canceled!" -ForegroundColor Yellow
+                $AESData = $Null
+            }
+        }
+    }
 
     if ( $PassThru ){
         Return $AESData
@@ -173,6 +214,11 @@ Function Get-VarToString {
     $Res = [System.Runtime.InteropServices.Marshal]::PtrToStringAuto($Var)
     if(!$res){
         Write-Host "Get-VarToString return $Null! Var type is $($Var.gettype())." -ForegroundColor red
+    }
+    Else {
+        if ( $Res -like "*{*}"){
+            $Res = $Res | ConvertFrom-JSON
+        }
     }
     return $Res
 }
@@ -971,7 +1017,7 @@ Function Send-Email {
         }
         $smtp.EnableSSL = $SSL
     }
-    if ($user) {
+    if ( $user ) {
         $Credentials  = New-Object System.Net.NetworkCredential((Get-VarToString $user), (Get-VarToString $Password))
         $smtp.Credentials = $Credentials
     }
@@ -1047,7 +1093,7 @@ Function New-TelegramMessage {
         Function to send telegram message.
     .EXAMPLE
         Parameter set: "Proxy"
-        New-TelegramMessage -Token $Token -ChatID $ChatID -Message $Message [-ProxyURL $ProxyURL] [-Credentials $Credentials] [-TTL $TTL=(New-TimeSpan -Days 1)] [-PauseBetweenTries $PauseBetweenTries=30]
+        New-TelegramMessage -Token $APIKey -ChatID $ChatID -Message $Message [-ProxyURL $ProxyURL] [-Credentials $Credentials] [-TTL $TTL=(New-TimeSpan -Days 1)] [-PauseBetweenTries $PauseBetweenTries=30]
     .NOTES
         AUTHOR  Alexk
         CREATED 05.11.20
@@ -1057,20 +1103,22 @@ Function New-TelegramMessage {
     Param(
         [Parameter( Mandatory = $true, Position = 0, HelpMessage = "Telegram token." )]
         [ValidateNotNullOrEmpty()]
-        [securestring]$Token,
+        [securestring] $APIKey,
         [Parameter( Mandatory = $true, Position = 1, HelpMessage = "Telegram chat id." )]
         [ValidateNotNullOrEmpty()]
-        [securestring]$ChatID,
-        [Parameter( Mandatory = $true, Position = 2, HelpMessage = "Message." )]
+        [securestring] $ChatID,
+        [Parameter( Mandatory = $false, Position = 2, HelpMessage = "Group telegram message in interval." )]
+        [int16] $SummaryInterval,
+        [Parameter( Mandatory = $true, Position = 3, HelpMessage = "Message." )]
         [ValidateNotNullOrEmpty()]
-        [string]$Message,
-        [Parameter( Mandatory = $false, Position = 3, HelpMessage = "Proxy URL." , ParameterSetName = "Proxy")]
-        [string]$ProxyURL,
-        [Parameter( Mandatory = $false, Position = 4, HelpMessage = "Proxy credentials." , ParameterSetName = "Proxy")]
+        [string] $Message,
+        [Parameter( Mandatory = $false, Position = 4, HelpMessage = "Proxy URL." , ParameterSetName = "Proxy")]
+        [string] $ProxyURL,
+        [Parameter( Mandatory = $false, Position = 5, HelpMessage = "Proxy credentials." , ParameterSetName = "Proxy")]
         [System.Management.Automation.PSCredential] $Credentials,
-        [Parameter( Mandatory = $false, Position = 5, HelpMessage = "Message time to live in seconds. Use in case of errors." )]
-        [TimeSpan]$TTL = (New-TimeSpan -Days 1),
-        [Parameter(Mandatory  = $false, Position = 6, HelpMessage = "Pause between retries in seconds." )]
+        [Parameter( Mandatory = $false, Position = 6, HelpMessage = "Message time to live in seconds. Use in case of errors." )]
+        [TimeSpan] $TTL = (New-TimeSpan -Days 1),
+        [Parameter(Mandatory  = $false, Position = 7, HelpMessage = "Pause between retries in seconds." )]
         [int16]  $PauseBetweenTries   = 30
 
 
@@ -1086,7 +1134,7 @@ Function New-TelegramMessage {
         Add-ToLog -Message "Error while enabling TLS mode [Tls12]!" -Status "Error" -Display -logFilePath $Global:gsScriptLogFilePath
     }
 
-    $URI  = "https://api.telegram.org/bot" + (Get-VarToString $Token) + "/sendMessage?chat_id=" + (Get-VarToString $ChatID) + "&text=" + $Message
+    [uri] $URI  = "https://api.telegram.org/bot" + ( Get-VarToString -var $APIKey ) + "/sendMessage?chat_id=" + ( Get-VarToString -var $ChatID ) + "&text=" + $Message
 
     if ($ProxyURL) {
         [system.net.webrequest]::defaultwebproxy                    = New-Object system.net.webproxy($ProxyURL)
@@ -2285,6 +2333,24 @@ function Convert-StringToDigitArray {
     }
 
     return $SelectedArray
+}
+
+function Convert-PSCustomObjectToHashTable {
+<#
+    .DESCRIPTION
+        Convert string to array of digit.    
+#>
+    [OutputType([HashTable])]
+    [CmdletBinding()]
+    param(
+        [Parameter( Mandatory = $True, Position = 0, HelpMessage = "PSCustom object.")]
+        [PSCustomObject] $PSO
+    )
+
+    $Result = @{}
+    $PSO.psobject.properties | ForEach-Object { $Result[$_.Name] = $_.Value }
+
+    return $Result
 }
 function Invoke-TrailerIncrease {
 <#
@@ -3514,6 +3580,7 @@ function Show-ColoredTable {
         while ( (!$SelectedArray) ){
             Write-host ""        
             Write-Host $SelectMessage -NoNewline -ForegroundColor $Color[0]
+            $Selected = $null
             while( !$Selected ){
                 $Selected       = Read-Host
                 if ( !$Selected ){
@@ -3590,72 +3657,272 @@ Function Get-Answer {
         [string] $DefaultChoose,
         [Parameter(Mandatory = $false, Position = 3, HelpMessage = "Two view colors." )]
         [String[]] $Color,
-        [Parameter(Mandatory = $false, Position = 4, HelpMessage = "Add new line at the end." )]
+        [Parameter(Mandatory = $false, Position = 4, HelpMessage = "Array of allowed result types." )]
+        [String[]] $AllowType,
+        [Parameter(Mandatory = $false, Position = 5, HelpMessage = "Array of allowed result types." )]
+        [String] $Format,
+        [Parameter(Mandatory = $false, Position = 6, HelpMessage = "Add new line at the end." )]
         [Switch] $AddNewLine,
-        [Parameter(Mandatory = $false, Position = 4, HelpMessage = "Read as secure string." )]
-        [Switch] $AsSecureString
+        [Parameter(Mandatory = $false, Position = 7, HelpMessage = "Read as secure string." )]
+        [Switch] $AsSecureString,
+        [Parameter(Mandatory = $false, Position = 8, HelpMessage = "Mask * input." )]
+        [Switch] $MaskInput,
+        [Parameter(Mandatory = $false, Position = 9, HelpMessage = "Result should not be empty." )]
+        [Switch] $NotNull
     )
+
+    function Test-TypeAllowed ( $Res, [String[]] $AllowType ) {
+        if ( $AllowType -and $res ){
+            $AllowedType = $false
+            foreach ( $type in $AllowType ){
+                switch ( $type ) {
+                    "string" {  
+                        try {
+                            $Res.ToString()
+                            $AllowedType = $true                            
+                            break
+                        }
+                        Catch{}
+                    }
+                    "int" {  
+                        try {
+                            $Res.ToInt64()
+                            $AllowedType = $true
+                            break
+                        }
+                        Catch{}
+                    }
+                    Default {}
+                }
+            }
+        }
+        Else {
+            $AllowedType = $true
+        }
+
+        return $AllowedType
+    }
+    function Test-Format ( $Res, $FormatRegex ) {
+        if ( $FormatRegex -and $Res ) {
+            $Formatted = $Res -match $FormatRegex
+        }
+        Else {
+            $Formatted = $true
+        }
+
+        return $Formatted
+    }
+
     $Res = $null
 
     write-host ""
     write-host "============================="
-    if ( $ChooseFrom ) {
-        $OptionSeparator = "/"
-        $ChoseFromString = ""
-
-        foreach ( $item in $ChooseFrom ) {
-            if ( $item.toupper() -ne $DefaultChoose.toupper() ){
-                $ChoseFromString += "$($item.toupper())$OptionSeparator"
+    
+    $Formatted   = $false
+    if ( $Format ) {
+        switch ( $Format ) {
+            "Email" {
+                $Format = "[a-z0-9!#\$%&'*+/=?^_`{|}~-]+(?:\.[a-z0-9!#\$%&'*+/=?^_`{|}~-]+)*@(?:[a-z0-9](?:[a-z0-9-]*[a-z0-9])?\.)+[a-z0-9](?:[a-z0-9-]*[a-z0-9])?"
             }
-            Else {
-                $ChoseFromString += "($($item.toupper()))$OptionSeparator"
+            "FQDN" {
+                $Format = "(?=^.{4,253}$)(^((?!-)[a-zA-Z0-9-]{1,63}(?<!-)\.)+[a-zA-Z]{2,63}$)"
             }
-        }
-
-        $ChoseFromString = $ChoseFromString.Substring(0,($ChoseFromString.Length-$OptionSeparator.Length))
-
-        $Message = "$Title [$ChoseFromString]"
-
-        $ChooseFromUpper = @()
-        foreach ( $item in $ChooseFrom ){
-            $ChooseFromUpper += $item.ToUpper()
-        }
-        if ( $DefaultChoose ){
-            $ChooseFromUpper += ""
-        }
-
-        while ( $res -notin $ChooseFromUpper ) {
-            if ( $Color ) {
-                write-host -object "$Title[" -ForegroundColor $Color[0] -NoNewline
-                write-host -object "$ChoseFromString" -ForegroundColor $Color[1] -NoNewline
-                write-host -object "]" -ForegroundColor $Color[0] -NoNewline
+            "IPv4" {
+                $Format = "\b(([01]?\d?\d|2[0-4]\d|25[0-5])\.){3}([01]?\d?\d|2[0-4]\d|25[0-5])\b"
             }
-            Else {
-                write-host -object $Message -NoNewline
-            }
-            $res = Read-Host
-            if ( $DefaultChoose ){
-                if ( $res -eq "" ) {
-                    $res = $DefaultChoose
-                }
-            }
-
-            $res = $res.ToUpper()
+            Default { }
         }
-    }
-    Else {
-        write-host -object $Title -ForegroundColor $Color[0] -NoNewline
-        if ( $AsSecureString ){
-            $res = Read-Host -AsSecureString
+        try {
+            $FormatRegex = [regex]::new( $Format )            
         }
-        Else {
-            $res = Read-Host
+        Catch {
+            write-host "Error in format [$format] regex!" -ForegroundColor Red
+            $FormatRegex = $null
+            $Format      = $null
         }
         
     }
 
-    write-host -object "Selected: " -ForegroundColor $Color[0] -NoNewline
-    write-host -object "$res" -ForegroundColor $Color[1] -NoNewline
+    $AllowedType = $false
+    if ( $AllowType ){
+        $AllowedTypeList = $AllowType -join ", "
+    }
+
+    while ( !$AllowedType -or !$Formatted ) {
+        if ( $ChooseFrom ) {
+        
+            $OptionSeparator = "/"
+            $ChoseFromString = ""
+
+            foreach ( $item in $ChooseFrom ) {
+                if ( $item.toupper() -ne $DefaultChoose.toupper() ){
+                    $ChoseFromString += "$($item.toupper())$OptionSeparator"
+                }
+                Else {
+                    $ChoseFromString += "($($item.toupper()))$OptionSeparator"
+                }
+            }
+
+            $ChoseFromString = $ChoseFromString.Substring(0,($ChoseFromString.Length-$OptionSeparator.Length))
+
+            $Message = "$Title [$ChoseFromString]"
+
+            $ChooseFromUpper = @()
+            foreach ( $item in $ChooseFrom ){
+                $ChooseFromUpper += $item.ToUpper()
+            }
+            if ( $DefaultChoose ){
+                $ChooseFromUpper += ""
+            }
+
+            while ( $res -notin $ChooseFromUpper ) {
+                if ( $AllowType ){
+                    if ( $Format ){
+                        if ( $Color ) {
+                            Write-Host -Object "[format][$AllowedTypeList] " -ForegroundColor $Color[1] -NoNewline
+                            write-host -object "[$AllowedTypeList] " -ForegroundColor $Color[1] -NoNewline
+                            write-host -object "$Title[" -ForegroundColor $Color[0] -NoNewline
+                            write-host -object "$ChoseFromString" -ForegroundColor $Color[1] -NoNewline
+                            write-host -object "]" -ForegroundColor $Color[0] -NoNewline
+                        }
+                        Else {
+                            write-host -object "[format][$AllowedTypeList] $Message" -NoNewline
+                        }
+                    }
+                    Else {
+                        if ( $Color ) {
+                            write-host -object "[$AllowedTypeList] " -ForegroundColor $Color[1] -NoNewline
+                            write-host -object "$Title[" -ForegroundColor $Color[0] -NoNewline
+                            write-host -object "$ChoseFromString" -ForegroundColor $Color[1] -NoNewline
+                            write-host -object "]" -ForegroundColor $Color[0] -NoNewline
+                        }
+                        Else {
+                            write-host -object "[$AllowedTypeList] $Message" -NoNewline
+                        }
+                    }
+                }
+                Else  {
+                    if ( $Format ){
+                        if ( $Color ) {
+                            write-host -object "[format] " -ForegroundColor $Color[1] -NoNewline
+                            Write-Host -Object "$Title[" -ForegroundColor $Color[0] -NoNewline
+                            Write-Host -Object "$ChoseFromString" -ForegroundColor $Color[1] -NoNewline
+                            Write-Host -Object "]" -ForegroundColor $Color[0] -NoNewline
+                        }
+                        Else {
+                            Write-Host -Object "[format] $Message" -NoNewline
+                        } 
+                    }
+                    Else {
+                        if ( $Color ) {
+                            Write-Host -Object "$Title[" -ForegroundColor $Color[0] -NoNewline
+                            Write-Host -Object "$ChoseFromString" -ForegroundColor $Color[1] -NoNewline
+                            Write-Host -Object "]" -ForegroundColor $Color[0] -NoNewline
+                        }
+                        Else {
+                            Write-Host -Object $Message -NoNewline
+                        }
+                    }
+                }
+                $res = Read-Host
+                if ( $DefaultChoose ){
+                    if ( $res -eq "" ) {
+                        $res = $DefaultChoose
+                    }
+                }
+
+                $res = $res.ToUpper()
+            }            
+        }
+        Else {
+            if ( $AllowType ) {
+                if ( $Format ) {
+                    if ( $color ){
+                        Write-Host -Object "[format][$AllowedTypeList] " -ForegroundColor $Color[1] -NoNewline
+                        write-host -object $Title -ForegroundColor $Color[0] -NoNewline
+                    }
+                    Else {
+                        Write-Host -Object "[format][$AllowedTypeList] $Title" -NoNewline
+                    }
+                }
+                Else{
+                    if ( $color ) {
+                        Write-Host -Object "[$AllowedTypeList] " -ForegroundColor $Color[1] -NoNewline
+                        Write-Host -Object $Title -ForegroundColor $Color[0] -NoNewline
+                    }
+                    Else {
+                        Write-Host -Object "[$AllowedTypeList] $Title" -NoNewline
+                    }
+                }
+            }
+            else {
+                if ( $Format ) {
+                    if ( $color ){
+                        Write-Host -Object "[format] " -ForegroundColor $Color[1] -NoNewline
+                        write-host -object $Title -ForegroundColor $Color[0] -NoNewline
+                    }
+                    Else {
+                        write-host -object "[format] $Title" -NoNewline
+                    }
+                }
+                Else {
+                    if ( $color ) {
+                        Write-Host -Object $Title -ForegroundColor $Color[0] -NoNewline
+                    }
+                    Else {
+                        Write-Host -Object $Title -NoNewline
+                    }
+                }
+            }
+            if ( !$NotNull ) {            
+                if ( $MaskInput) {                
+                    $res = Read-Host -MaskInput
+                }
+                ElseIf ( $AsSecureString ) {                        
+                    $res = Read-Host -AsSecureString
+                }
+                Else {
+                    $res = Read-Host
+                }            
+            }
+            Else {
+                while ( !$Res ) {
+                    if ( $MaskInput) {                
+                        $res = Read-Host -MaskInput
+                    }
+                    ElseIf ( $AsSecureString ) {                        
+                        $res = Read-Host -AsSecureString
+                    }
+                    Else {
+                        $res = Read-Host
+                    }
+                    if ( !$Res ){
+                        write-host "Empty not allowed!" -ForegroundColor Red
+                    }
+                }
+            }        
+        }
+
+        $AllowedType = Test-TypeAllowed $Res $AllowType
+        if ( !$AllowedType -and $AllowType ){
+            write-host "Unexpected result type, allowed only [$($AllowType -join ", ")] " -ForegroundColor Red
+            $res = $null
+        }
+        $Formatted = Test-Format $Res $FormatRegex
+        if ( !$Formatted -and $FormatRegex ) {
+            write-host "Unexpected result format, allowed only [$FormatRegex] " -ForegroundColor Red
+            $res = $null
+        }
+    } 
+    
+    if ( $MaskInput ){
+        Write-Host -Object "Selected: " -ForegroundColor $Color[0] -NoNewline
+        Write-Host -Object "*" -ForegroundColor $Color[1] -NoNewline
+    }
+    Else {        
+        write-host -object "Selected: " -ForegroundColor $Color[0] -NoNewline
+        write-host -object "$res" -ForegroundColor $Color[1] -NoNewline
+    }
 
     if ( $AddNewLine ){
         Write-host ""
@@ -3945,7 +4212,7 @@ function Get-ErrorReporting {
 # }
 #>
 
-Export-ModuleMember -Function Get-NewAESKey, Get-VarFromAESFile, Set-VarToAESFile, Disconnect-VPN, Connect-VPN, Add-ToLog, Restart-Switches, Restart-SwitchInInterval, Get-EventList, Send-Email, Start-PSScript, Restart-LocalHostInInterval, Show-Notification, Restart-ServiceInInterval, New-TelegramMessage, Get-SettingsFromFile, Get-HTMLTable, Get-HTMLCol, Get-ContentFromHTMLTemplate, Get-ErrorReporting, Get-CopyByBITS, Show-OpenDialog, Import-ModuleRemotely, Invoke-PSScriptBlock, Get-ACLArray, Set-PSModuleManifest, Get-VarToString, Get-UniqueArrayMembers, Resolve-IPtoFQDNinArray, Get-HelpersData, Get-DifferenceBetweenArrays, Test-Credentials, Convert-FSPath, Start-Program, Test-ElevatedRights, Invoke-CommandWithDebug, Format-TimeSpan, Start-ParallelPortPing, Join-Array, Set-State, Send-Alert, Start-Module, Convert-SpecialCharacters, Get-ListByGroups, Convert-StringToDigitArray, Invoke-TrailerIncrease, Split-words, Remove-Modules, Get-TextLengthPreview, Export-RegistryToFile, Show-ColoredTable, Get-Answer
+Export-ModuleMember -Function Get-NewAESKey, Get-VarFromAESFile, Set-VarToAESFile, Disconnect-VPN, Connect-VPN, Add-ToLog, Restart-Switches, Restart-SwitchInInterval, Get-EventList, Send-Email, Start-PSScript, Restart-LocalHostInInterval, Show-Notification, Restart-ServiceInInterval, New-TelegramMessage, Get-SettingsFromFile, Get-HTMLTable, Get-HTMLCol, Get-ContentFromHTMLTemplate, Get-ErrorReporting, Get-CopyByBITS, Show-OpenDialog, Import-ModuleRemotely, Invoke-PSScriptBlock, Get-ACLArray, Set-PSModuleManifest, Get-VarToString, Get-UniqueArrayMembers, Resolve-IPtoFQDNinArray, Get-HelpersData, Get-DifferenceBetweenArrays, Test-Credentials, Convert-FSPath, Start-Program, Test-ElevatedRights, Invoke-CommandWithDebug, Format-TimeSpan, Start-ParallelPortPing, Join-Array, Set-State, Send-Alert, Start-Module, Convert-SpecialCharacters, Get-ListByGroups, Convert-StringToDigitArray, Convert-PSCustomObjectToHashTable, Invoke-TrailerIncrease, Split-words, Remove-Modules, Get-TextLengthPreview, Export-RegistryToFile, Show-ColoredTable, Get-Answer
 
 <#
 
