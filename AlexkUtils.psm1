@@ -842,7 +842,7 @@ Function Send-Alert {
 
     $Jobs = Get-Job -HasMoreData $false -State "Completed"
     if ( $Jobs ){
-        $Jobs Remove-Job
+        $Jobs | Remove-Job
     }
 }
 Function Set-State {
