@@ -867,7 +867,7 @@ Function Set-State {
         [switch] $SaveOnChange
     )
 
-    if (Test-Path $StateFilePath) {
+    if (Test-Path -path $StateFilePath) {
         if ( $StateFilePath.ToLower().contains("csv") ) {
             $States = Import-Csv -Path $StateFilePath
         }
@@ -879,10 +879,10 @@ Function Set-State {
         $States = @()
     }
 
-    $LastState = $States | Select-Object -Last 1
-    $StateChanged = $LastState.State -ne $StateObject.State
+    $LastState        = $States | Select-Object -Last 1
+    $StateChanged     = $LastState.State -ne $StateObject.State
     $StateObject.date = Get-Date
-    $AlertMessage = @"
+    $AlertMessage     = @"
 $($StateObject.Application)@$($StateObject.Host)[$(Get-Date $StateObject.date -Format HH:mm)]
 $($StateObject.Action)
 $($StateObject.State)
@@ -892,8 +892,8 @@ Global state: $($StateObject.GlobalState)
         if ($StateChanged) {
             switch ($AlertType.ToLower()) {
                 "telegram" {
-                    if ($Global:TelegramParameters) {
-                        Send-Alert -AlertParameters $Global:gsPlugins.SelectPlugin("telegram") -AlertMessage $AlertMessage
+                    if ( $Global:gsPlugins.SelectPlugin("telegram") ) {
+                        Send-Alert -Plugin $Global:gsPlugins.SelectPlugin("telegram") -AlertMessage $AlertMessage
                         Add-ToLog -Message "Sent telegram message." -logFilePath $Global:gsScriptLogFilePath -Display -Status "Info"
                     }
                     Else {
@@ -3577,47 +3577,49 @@ function Show-ColoredTable {
     }
 
     if ( $SelectMessage ){
-        while ( (!$SelectedArray) ){
+        while ( (!$SelectedArray) -and $data  ) {
             Write-host ""        
             Write-Host $SelectMessage -NoNewline -ForegroundColor $Color[0]
             $Selected = $null
-            while( !$Selected ){
+            while( !$Selected -and $data ){
                 $Selected       = Read-Host
-                if ( !$Selected ){
+                if ( !$Selected -and $data ){
                     write-host "Select correct number!" -ForegroundColor red
                 }
             }
             
-            $SelectedNum    = Convert-StringToDigitArray -UserInput $Selected -DataSize $Data.count
-            $SelectedFields = ($Data | Where-Object { ($Data.IndexOf($_) + 1) -in $SelectedNum }).$SelectField
-            $SelectedArray  = $Data | Where-Object { $_.$SelectField -in $SelectedFields }
-            Write-Host ""
-            write-host "Selected items: " -ForegroundColor $Color[0]
+            if ( $data ) {
+                $SelectedNum    = Convert-StringToDigitArray -UserInput $Selected -DataSize $Data.count
+                $SelectedFields = ($Data | Where-Object { ($Data.IndexOf($_) + 1) -in $SelectedNum }).$SelectField
+                $SelectedArray  = $Data | Where-Object { $_.$SelectField -in $SelectedFields }
+                Write-Host ""
+                write-host "Selected items: " -ForegroundColor $Color[0]
 
-            $Cnt        = 1
-            $ColorCount = $Color.Count - 1
+                $Cnt        = 1
+                $ColorCount = $Color.Count - 1
 
-            $TableData  = ( $SelectedArray  | format-table -property $View -AutoSize | Out-String ).trim().split("`r")
-            foreach ( $line in $TableData ){
-                write-host $line -ForegroundColor $Color[$Cnt] -NoNewLine
+                $TableData  = ( $SelectedArray  | format-table -property $View -AutoSize | Out-String ).trim().split("`r")
+                foreach ( $line in $TableData ){
+                    write-host $line -ForegroundColor $Color[$Cnt] -NoNewLine
 
-                if ( $Cnt -lt $ColorCount){
-                    $Cnt++
+                    if ( $Cnt -lt $ColorCount){
+                        $Cnt++
+                    }
+                    Else {
+                        $Cnt = 1
+                    }
                 }
-                Else {
-                    $Cnt = 1
+                if ( $AddNewLine ){
+                    Write-host ""
                 }
-            }
-            if ( $AddNewLine ){
-                Write-host ""
-            }
 
-            if ( !$NotNull ){
-                return $SelectedArray
-            }
-            else {
-                if ( $null -eq $SelectedArray ){
-                    write-host "Choose correct option!" -ForegroundColor red
+                if ( !$NotNull ){
+                    return $SelectedArray
+                }
+                else {
+                    if ( $null -eq $SelectedArray ){
+                        write-host "Choose correct option!" -ForegroundColor red
+                    }
                 }
             }
         }
@@ -3655,20 +3657,24 @@ Function Get-Answer {
         [string[]] $ChooseFrom,
         [Parameter(Mandatory = $false, Position = 2, HelpMessage = "Default option." )]
         [string] $DefaultChoose,
-        [Parameter(Mandatory = $false, Position = 3, HelpMessage = "Two view colors." )]
+        [Parameter(Mandatory = $false, Position = 3, HelpMessage = "Firs color - text, second options and parameters, third color examples." )]
         [String[]] $Color,
         [Parameter(Mandatory = $false, Position = 4, HelpMessage = "Array of allowed result types." )]
         [String[]] $AllowType,
         [Parameter(Mandatory = $false, Position = 5, HelpMessage = "Array of allowed result types." )]
         [String] $Format,
-        [Parameter(Mandatory = $false, Position = 6, HelpMessage = "Add new line at the end." )]
+        [Parameter(Mandatory = $false, Position = 6, HelpMessage = "Input example." )]
+        [String] $Example,
+        [Parameter(Mandatory = $false, Position = 7, HelpMessage = "Add new line at the end." )]
         [Switch] $AddNewLine,
-        [Parameter(Mandatory = $false, Position = 7, HelpMessage = "Read as secure string." )]
+        [Parameter(Mandatory = $false, Position = 8, HelpMessage = "Read as secure string." )]
         [Switch] $AsSecureString,
-        [Parameter(Mandatory = $false, Position = 8, HelpMessage = "Mask * input." )]
+        [Parameter(Mandatory = $false, Position = 9, HelpMessage = "Mask * input." )]
         [Switch] $MaskInput,
-        [Parameter(Mandatory = $false, Position = 9, HelpMessage = "Result should not be empty." )]
-        [Switch] $NotNull
+        [Parameter(Mandatory = $false, Position = 10, HelpMessage = "Result should not be empty." )]
+        [Switch] $NotNull,
+        [Parameter(Mandatory = $false, Position = 11, HelpMessage = "Not repeat input value." )]
+        [Switch] $HideInput
     )
 
     function Test-TypeAllowed ( $Res, [String[]] $AllowType ) {
@@ -3687,6 +3693,14 @@ Function Get-Answer {
                     "int" {  
                         try {
                             $Res.ToInt64()
+                            $AllowedType = $true
+                            break
+                        }
+                        Catch{}
+                    }
+                    "URI" {  
+                        try {
+                            [URI]$Res
                             $AllowedType = $true
                             break
                         }
@@ -3711,6 +3725,136 @@ Function Get-Answer {
         }
 
         return $Formatted
+    }
+    Function Get-OutputString ( $Color, $AllowType, $Format, $Title, $Example, $ChoseFromString, $DefaultChoose, [Switch] $ReadOnNewLine, $NotNull, $MaskInput ){        
+        if ( $color ) {
+            $ColorString = @()
+            
+            if ( $Format ){
+                $PSO = [PSCustomObject]@{
+                    String = "[format]"
+                    Color  = $Color[1]
+                }
+                $ColorString += $PSO
+            }
+            If ( $AllowType ){
+                $AllowedTypeList  = $AllowType -join ", "
+                $PSO = [PSCustomObject]@{
+                    String = "[$AllowedTypeList] "
+                    Color  = $Color[1]
+                }
+                $ColorString     += $PSO
+            }            
+            if ( $Title ) {
+                $PSO = [PSCustomObject]@{
+                    String = $Title
+                    Color  = $Color[0]
+                }
+                $ColorString     += $PSO
+            }
+            if ( $Example ){
+                $PSO = [PSCustomObject]@{
+                    String = " (e.g. $Example)"
+                    Color  = $Color[2]
+                }
+                $ColorString     += $PSO
+            }
+            if ( $ChoseFromString ){
+                $PSO = [PSCustomObject]@{
+                    String = "["
+                    Color  = $Color[0]
+                }
+                $ColorString     += $PSO
+
+                $PSO = [PSCustomObject]@{
+                    String = $ChoseFromString
+                    Color  = $Color[1]
+                }
+                $ColorString     += $PSO
+
+                $PSO = [PSCustomObject]@{
+                    String = "]"
+                    Color  = $Color[0]
+                }
+                $ColorString     += $PSO
+            }
+
+            $PSO = [PSCustomObject]@{
+                String = ": "
+                Color  = $Color[0]
+            }
+            $ColorString     += $PSO
+            
+            foreach ( $String in $ColorString ){
+                write-host -Object $String.string -NoNewline -ForegroundColor $String.Color
+            }
+        }
+        Else {
+            $OutString = ""
+            if ( $Format ) {
+                $OutString = $OutString + "[format]"
+            }
+            If ( $AllowType ) {
+                $AllowedTypeList = $AllowType -join ", "
+                $OutString = $OutString + "[$AllowedTypeList] "
+            }            
+            if ( $Title ) {
+                $OutString = $OutString + $Title
+            }
+            if ( $Example ) {
+                $OutString = $OutString + " (e.g. $Example)"
+            }
+            if ( $ChoseFromString ) {
+                $OutString = $OutString + "[" + $ChoseFromString + "]"
+            }
+
+            $OutString = $OutString + ": "
+            write-host -Object $OutString -NoNewline
+        }
+
+        if ( $ReadOnNewLine ) {
+            write-host ""
+        } 
+        if ( $ChoseFromString ) {
+            $Res = Read-Host
+            if ( $DefaultChoose ){
+                if ( $Res -eq "" ) {
+                    $Res = $DefaultChoose
+                }
+            }
+            $Res = $Res.ToUpper()
+        }
+        Else {
+            if ( !$NotNull ) {
+                if ( $MaskInput) {                
+                    $res = Read-Host -MaskInput
+                }
+                ElseIf ( $AsSecureString ) {                        
+                    $res = Read-Host -AsSecureString
+                }
+                Else {
+                    $res = Read-Host
+                }            
+            }
+            Else {
+                while ( !$Res ) {
+                    if ( $MaskInput) {                
+                        $res = Read-Host -MaskInput
+                    }
+                    ElseIf ( $AsSecureString ) {                        
+                        $res = Read-Host -AsSecureString
+                    }
+                    Else {
+                        $res = Read-Host
+                    }
+                    if ( !$Res ){
+                        write-host "Empty not allowed!" -ForegroundColor Red
+                    }
+                }
+            }
+        }        
+
+        return $Res
     }
 
     $Res = $null
@@ -3741,12 +3885,9 @@ Function Get-Answer {
             $Format      = $null
         }
         
-    }
+    }    
 
     $AllowedType = $false
-    if ( $AllowType ){
-        $AllowedTypeList = $AllowType -join ", "
-    }
 
     while ( !$AllowedType -or !$Formatted ) {
         if ( $ChooseFrom ) {
@@ -3776,152 +3917,46 @@ Function Get-Answer {
             }
 
             while ( $res -notin $ChooseFromUpper ) {
-                if ( $AllowType ){
-                    if ( $Format ){
-                        if ( $Color ) {
-                            Write-Host -Object "[format][$AllowedTypeList] " -ForegroundColor $Color[1] -NoNewline
-                            write-host -object "[$AllowedTypeList] " -ForegroundColor $Color[1] -NoNewline
-                            write-host -object "$Title[" -ForegroundColor $Color[0] -NoNewline
-                            write-host -object "$ChoseFromString" -ForegroundColor $Color[1] -NoNewline
-                            write-host -object "]" -ForegroundColor $Color[0] -NoNewline
-                        }
-                        Else {
-                            write-host -object "[format][$AllowedTypeList] $Message" -NoNewline
-                        }
-                    }
-                    Else {
-                        if ( $Color ) {
-                            write-host -object "[$AllowedTypeList] " -ForegroundColor $Color[1] -NoNewline
-                            write-host -object "$Title[" -ForegroundColor $Color[0] -NoNewline
-                            write-host -object "$ChoseFromString" -ForegroundColor $Color[1] -NoNewline
-                            write-host -object "]" -ForegroundColor $Color[0] -NoNewline
-                        }
-                        Else {
-                            write-host -object "[$AllowedTypeList] $Message" -NoNewline
-                        }
-                    }
-                }
-                Else  {
-                    if ( $Format ){
-                        if ( $Color ) {
-                            write-host -object "[format] " -ForegroundColor $Color[1] -NoNewline
-                            Write-Host -Object "$Title[" -ForegroundColor $Color[0] -NoNewline
-                            Write-Host -Object "$ChoseFromString" -ForegroundColor $Color[1] -NoNewline
-                            Write-Host -Object "]" -ForegroundColor $Color[0] -NoNewline
-                        }
-                        Else {
-                            Write-Host -Object "[format] $Message" -NoNewline
-                        } 
-                    }
-                    Else {
-                        if ( $Color ) {
-                            Write-Host -Object "$Title[" -ForegroundColor $Color[0] -NoNewline
-                            Write-Host -Object "$ChoseFromString" -ForegroundColor $Color[1] -NoNewline
-                            Write-Host -Object "]" -ForegroundColor $Color[0] -NoNewline
-                        }
-                        Else {
-                            Write-Host -Object $Message -NoNewline
-                        }
-                    }
-                }
-                $res = Read-Host
-                if ( $DefaultChoose ){
-                    if ( $res -eq "" ) {
-                        $res = $DefaultChoose
-                    }
-                }
-
-                $res = $res.ToUpper()
+                $Res = Get-OutputString -color $Color -AllowType $AllowType -Format $Format -Title $Title -Example $Example -ChoseFromString $ChoseFromString -DefaultChoose $DefaultChoose -NotNull $NotNull -MaskInput $MaskInput
+               
             }            
         }
         Else {
-            if ( $AllowType ) {
-                if ( $Format ) {
-                    if ( $color ){
-                        Write-Host -Object "[format][$AllowedTypeList] " -ForegroundColor $Color[1] -NoNewline
-                        write-host -object $Title -ForegroundColor $Color[0] -NoNewline
-                    }
-                    Else {
-                        Write-Host -Object "[format][$AllowedTypeList] $Title" -NoNewline
-                    }
-                }
-                Else{
-                    if ( $color ) {
-                        Write-Host -Object "[$AllowedTypeList] " -ForegroundColor $Color[1] -NoNewline
-                        Write-Host -Object $Title -ForegroundColor $Color[0] -NoNewline
-                    }
-                    Else {
-                        Write-Host -Object "[$AllowedTypeList] $Title" -NoNewline
-                    }
-                }
-            }
-            else {
-                if ( $Format ) {
-                    if ( $color ){
-                        Write-Host -Object "[format] " -ForegroundColor $Color[1] -NoNewline
-                        write-host -object $Title -ForegroundColor $Color[0] -NoNewline
-                    }
-                    Else {
-                        write-host -object "[format] $Title" -NoNewline
-                    }
-                }
-                Else {
-                    if ( $color ) {
-                        Write-Host -Object $Title -ForegroundColor $Color[0] -NoNewline
-                    }
-                    Else {
-                        Write-Host -Object $Title -NoNewline
-                    }
-                }
-            }
-            if ( !$NotNull ) {            
-                if ( $MaskInput) {                
-                    $res = Read-Host -MaskInput
-                }
-                ElseIf ( $AsSecureString ) {                        
-                    $res = Read-Host -AsSecureString
-                }
-                Else {
-                    $res = Read-Host
-                }            
-            }
-            Else {
-                while ( !$Res ) {
-                    if ( $MaskInput) {                
-                        $res = Read-Host -MaskInput
-                    }
-                    ElseIf ( $AsSecureString ) {                        
-                        $res = Read-Host -AsSecureString
-                    }
-                    Else {
-                        $res = Read-Host
-                    }
-                    if ( !$Res ){
-                        write-host "Empty not allowed!" -ForegroundColor Red
-                    }
-                }
-            }        
+            $Res = Get-OutputString -color $Color -AllowType $AllowType -Format $Format -Title $Title -Example $Example -ChoseFromString $ChoseFromString -DefaultChoose $DefaultChoose -NotNull $NotNull -MaskInput $MaskInput           
         }
 
-        $AllowedType = Test-TypeAllowed $Res $AllowType
+        $AllowedType = Test-TypeAllowed -Res $Res -AllowType $AllowType
         if ( !$AllowedType -and $AllowType ){
             write-host "Unexpected result type, allowed only [$($AllowType -join ", ")] " -ForegroundColor Red
-            $res = $null
+            $Res = $null
         }
-        $Formatted = Test-Format $Res $FormatRegex
+
+        $Formatted = Test-Format  -Res $Res -AllowType $FormatRegex
         if ( !$Formatted -and $FormatRegex ) {
             write-host "Unexpected result format, allowed only [$FormatRegex] " -ForegroundColor Red
-            $res = $null
+            $Res = $null
         }
     } 
     
-    if ( $MaskInput ){
-        Write-Host -Object "Selected: " -ForegroundColor $Color[0] -NoNewline
-        Write-Host -Object "*" -ForegroundColor $Color[1] -NoNewline
-    }
-    Else {        
-        write-host -object "Selected: " -ForegroundColor $Color[0] -NoNewline
-        write-host -object "$res" -ForegroundColor $Color[1] -NoNewline
+    if ( !$HideInput ){
+        if ( $color ) {
+            if ( $MaskInput -or $AsSecureString ){
+                Write-Host -Object "Selected: " -ForegroundColor $Color[0] -NoNewline
+                Write-Host -Object "*" -ForegroundColor $Color[1] -NoNewline
+            }
+            Else {        
+                write-host -object "Selected: " -ForegroundColor $Color[0] -NoNewline
+                write-host -object "$Res" -ForegroundColor $Color[1] -NoNewline
+            }
+        }
+        Else {
+            if ( $MaskInput -or $AsSecureString ) {
+                Write-Host -Object "Selected: *"
+            }
+            Else {        
+                Write-Host -Object "Selected: $Res"
+            }
+        }
     }
 
     if ( $AddNewLine ){
