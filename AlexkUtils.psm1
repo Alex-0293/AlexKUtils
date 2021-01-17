@@ -1,4 +1,4 @@
-﻿<#
+<#
     .SYNOPSIS
         AlexK utility module.
     .DESCRIPTION
@@ -60,7 +60,7 @@ Function Get-VarFromAESFile  {
     .DESCRIPTION
         Function to read variable from file encrypted with AES key.
     .EXAMPLE
-        Get-VarFromAESFile -AESKeyFilePath $AESKeyFilePath -VarFilePath $VarFilePath
+        Get-VarFromAESFile -VarFilePath $VarFilePath [-AESKeyFilePath $AESKeyFilePath]
     .NOTES
         AUTHOR  Alexk
         CREATED 05.11.20
@@ -78,8 +78,11 @@ Function Get-VarFromAESFile  {
     )
 
     if ( !$AESKeyFilePath ){
-        $AESKeyFilePath = Get-Content -path $VarFilePath -Stream "Key.Path"
-    } 
+        try {
+            $AESKeyFilePath = Get-Content -path $VarFilePath -Stream "Key.Path"
+        }
+        Catch {}
+    }
 
     if (!(test-path $AESKeyFilePath)) {
         write-host "AESKeyFilePath [$AESKeyFilePath] not exist" -ForegroundColor Red
@@ -93,16 +96,27 @@ Function Get-VarFromAESFile  {
     }
     else { $VarFilePathExist = $true }
 
-    if ($VarFilePathExist -and $AESKeyFilePathExist) {
-            try {
-                $Res = Get-Content $VarFilePath | ConvertTo-SecureString -Key (get-content $AESKeyFilePath)
+    if ( $VarFilePathExist -and $AESKeyFilePathExist ) {
+            $Content = Get-Content $VarFilePath
+            $Key     = Get-content $AESKeyFilePath
+            trap {
+
+            }
+            try{
+                $Res = ConvertTo-SecureString -Key $Key -String $Content -ErrorVariable LastError -ErrorAction stop
             }
             Catch {
-                write-host "Error [$($_.exception)], check your key!" - -ForegroundColor red
-                $Res = $Null
+                if ( $LastError ){
+                    switch ( $LastError.ErrorRecord ) {
+                        "Padding is invalid and cannot be removed." {
+                            Add-ToLog -Message "Validate AES key [$AESKeyFilePath] for data [$VarFilePath]!" -Display -Status "Error" -logFilePath $Global:gsScriptLogFilePath
+                        }
+                        Default {
+                            Add-ToLog -Message $LastError -Display -Status "Error" -logFilePath $Global:gsScriptLogFilePath
+                        }
+                    }
+                }
             }
-
-
         }
     Else {
         $Res = $null
@@ -117,7 +131,7 @@ Function Set-VarToAESFile {
     .DESCRIPTION
         Function to write variable to file with encryption with AES key file
     .EXAMPLE
-        Set-VarToAESFile -Var $Var -AESKeyFilePath $AESKeyFilePath -VarFilePath $VarFilePath [-PassThru $PassThru]
+        Set-VarToAESFile -Var $Var -AESKeyFilePath $AESKeyFilePath -VarFilePath $VarFilePath [-Force $Force] [-PassThru $PassThru]
     .NOTES
         AUTHOR  Alexk
         CREATED 05.11.20
@@ -142,6 +156,16 @@ Function Set-VarToAESFile {
     )
 
     function Set-AESContent ([string] $VarFilePath, [string] $AESKeyFilePath) {
+    <#
+        .SYNOPSIS
+            Set AES content
+        .EXAMPLE
+            Set-AESContent
+        .NOTES
+            AUTHOR  Alexk
+            CREATED 17.01.21
+            VER     1
+    #>
         if ( test-path -path $AESKeyFilePath ){
             $AESData | Set-Content -path $VarFilePath
             Set-Content -Path $VarFilePath -Value $AESKeyFilePath -Stream "Key.Path"
@@ -173,7 +197,7 @@ Function Set-VarToAESFile {
             $AESData = Set-AESContent -VarFilePath $VarFilePath -AESKeyFilePath $AESKeyFilePath
         }
         Else {
-            $Answer = Get-Answer -Title "File [$VarFilePath], already exist! Do you want to replace it? " -ChooseFrom "y", "n" -DefaultChoose "n" -Color "Cyan", "DarkMagenta" -AddNewLine 
+            $Answer = Get-Answer -Title "File [$VarFilePath], already exist! Do you want to replace it? " -ChooseFrom "y", "n" -DefaultChoose "n" -Color "Cyan", "DarkMagenta" -AddNewLine
             if ( $Answer -eq "Y" ){
                 $AESData = Set-AESContent -VarFilePath $VarFilePath -AESKeyFilePath $AESKeyFilePath
             }
@@ -740,12 +764,32 @@ Function Add-ToLog {
             }
             for ($i = 1; $i -le $Global:gsScriptOperationTry; $i++) {
                 try {
+                    $Data = @()
+                    $PSO = [PSCustomObject]@{
+                        DateTime  = Get-Date
+                        Status    = $Status.ToLower()
+                        Message   = $Message
+                    }
+                    $XMLLogPath = "$logFilePath.xml"
+
                     switch ($Mode.ToLower()) {
                     "append" {
                         Out-File -FilePath $logFilePath -Encoding utf8 -Append -Force -InputObject $Text
+                        if ( test-path -path $XMLLogPath ){
+                            $CSVData = import-cliXML -path $XMLLogPath
+                            $Data += $CSVData
+                            $Data += $PSO
+                            $Data | Export-CliXML -path $XMLLogPath
+                        }
+                        Else {
+                            $Data += $PSO
+                            $Data |  Export-CliXML -path $XMLLogPath
+                        }
                     }
                     "replace" {
                         Out-File -FilePath $logFilePath -Encoding utf8 -Force -InputObject $Text
+                        $Data += $PSO
+                        $Data |  Export-CliXML -path $XMLLogPath
                     }
                         Default { }
                     }
@@ -812,7 +856,7 @@ Function Send-Alert {
     .DESCRIPTION
         Send alert by custom transport.
     .EXAMPLE
-        Send-Alert -AlertParameters $Plugin -AlertMessage $AlertMessage [-AlertSubject $AlertSubject]
+        Send-Alert -Plugin $Plugin -AlertMessage $AlertMessage [-AlertSubject $AlertSubject] [-AlertFilePath $AlertFilePath] [-TextFilesAsHTML $TextFilesAsHTML]
     .NOTES
         AUTHOR  Alexk
         CREATED 05.11.20
@@ -825,11 +869,15 @@ Function Send-Alert {
         [Parameter( Mandatory = $True, Position = 2, HelpMessage = "Alert message.")]
         [string] $AlertMessage,
         [Parameter( Mandatory = $false, Position = 3, HelpMessage = "Alert subject.")]
-        [string] $AlertSubject
+        [string] $AlertSubject,
+        [Parameter( Mandatory = $false, Position = 4, HelpMessage = "File attachments.")]
+        [string[]] $AlertFilePath,
+        [Parameter( Mandatory = $false, Position = 5, HelpMessage = "Convert text file attachments to HTML.")]
+        [switch] $TextFilesAsHTML
     )
 
     $PluginSettings = $Plugin.Settings
-    
+
     switch ([string]$Plugin.name.ToLower()) {
         "telegram" {
             New-TelegramMessage @PluginSettings -Message $AlertMessage
@@ -874,7 +922,7 @@ Function Set-State {
 
     if (Test-Path -path $StateFilePath) {
         if ( $StateFilePath.ToLower().contains("csv") ) {
-            $States = Import-Csv -Path $StateFilePath
+            $States = import-Csv -Path $StateFilePath
         }
         ElseIf ( $StateFilePath.ToLower().contains("xml") ) {
             $States = Import-Clixml -Path $StateFilePath
@@ -913,7 +961,7 @@ Global state: $($StateObject.GlobalState)
         switch ($AlertType.ToLower()) {
             "telegram" {
                 if ($Global:TelegramParameters) {
-                    Send-Alert -AlertParameters $Global:gsPlugins.SelectPlugin("telegram") -AlertMessage $AlertMessage
+                    Send-Alert -Plugin $Global:gsPlugins.SelectPlugin("telegram") -AlertMessage $AlertMessage
                 }
                 Else {
                     Add-ToLog -Message "Telegram parameters not set! Plugin not available" -logFilePath $Global:gsScriptLogFilePath -Display -Status "Error"
@@ -1098,7 +1146,7 @@ Function New-TelegramMessage {
         Function to send telegram message.
     .EXAMPLE
         Parameter set: "Proxy"
-        New-TelegramMessage -Token $APIKey -ChatID $ChatID -Message $Message [-ProxyURL $ProxyURL] [-Credentials $Credentials] [-TTL $TTL=(New-TimeSpan -Days 1)] [-PauseBetweenTries $PauseBetweenTries=30]
+        New-TelegramMessage -APIKey $APIKey -ChatID $ChatID -Message $Message [-SummaryInterval $SummaryInterval] [-ProxyURL $ProxyURL] [-Credentials $Credentials] [-TTL $TTL=(New-TimeSpan -Days 1)] [-PauseBetweenTries $PauseBetweenTries=30]
     .NOTES
         AUTHOR  Alexk
         CREATED 05.11.20
@@ -2342,8 +2390,16 @@ function Convert-StringToDigitArray {
 
 function Convert-PSCustomObjectToHashTable {
 <#
+    .SYNOPSIS
+        Convert PS custom object to hash table
     .DESCRIPTION
-        Convert string to array of digit.    
+        Convert string to array of digit.
+    .EXAMPLE
+        Convert-PSCustomObjectToHashTable -PSO $PSO
+    .NOTES
+        AUTHOR  Alexk
+        CREATED 17.01.21
+        VER     1
 #>
     [OutputType([HashTable])]
     [CmdletBinding()]
@@ -3418,9 +3474,9 @@ function Show-ColoredTable {
         Show table in color view.
     .EXAMPLE
         Parameter set: "Alerts"
-        Show-ColoredTable -Field $Field [-Data $Data] [-Definition $Definition] [-View $View] [-Title $Title] [-SelectField $SelectField] [-SelectMessage $SelectMessage]
+        Show-ColoredTable -Field $Field [-Data $Data] [-Definition $Definition] [-View $View] [-Title $Title] [-SelectField $SelectField] [-SelectMessage $SelectMessage] [-NotNull $NotNull]
         Parameter set: "Color"
-        Show-ColoredTable [-Data $Data] [-View $View] [-Color $Color] [-Title $Title] [-AddRowNumbers $AddRowNumbers] [-SelectField $SelectField] [-SelectMessage $SelectMessage] [-PassThru $PassThru]
+        Show-ColoredTable [-Data $Data] [-View $View] [-Color $Color] [-Title $Title] [-AddRowNumbers $AddRowNumbers] [-SelectField $SelectField] [-SelectMessage $SelectMessage] [-NotNull $NotNull] [-AddNewLine $AddNewLine] [-PassThru $PassThru]
     .NOTES
         AUTHOR  Alexk
         CREATED 02.12.20
@@ -3528,7 +3584,12 @@ function Show-ColoredTable {
                 $Counter ++
             }
             $NewView  = @("Num")
-            $NewView += $View
+            if ( $View -ne "*" ){
+                $NewView += $View
+            }
+            Else {
+                $NewView = "*"
+            }
             $Data = $Result
             $View = $NewView
         }
@@ -3583,7 +3644,7 @@ function Show-ColoredTable {
 
     if ( $SelectMessage ){
         while ( (!$SelectedArray) -and $data  ) {
-            Write-host ""        
+            Write-host ""
             Write-Host $SelectMessage -NoNewline -ForegroundColor $Color[0]
             $Selected = $null
             while( !$Selected -and $data ){
@@ -3592,7 +3653,7 @@ function Show-ColoredTable {
                     write-host "Select correct number!" -ForegroundColor red
                 }
             }
-            
+
             if ( $data ) {
                 $SelectedNum    = Convert-StringToDigitArray -UserInput $Selected -DataSize $Data.count
                 $SelectedFields = ($Data | Where-Object { ($Data.IndexOf($_) + 1) -in $SelectedNum }).$SelectField
@@ -3647,7 +3708,7 @@ Function Get-Answer {
     .DESCRIPTION
         Colored read host with features.
     .EXAMPLE
-        Get-Answer -Title $Title [-ChooseFrom $ChooseFrom] [-DefaultChoose $DefaultChoose] [-Color $Color]
+        Get-Answer -Title $Title [-ChooseFrom $ChooseFrom] [-DefaultChoose $DefaultChoose] [-Color $Color] [-AllowType $AllowType] [-Format $Format] [-Example $Example] [-AddNewLine $AddNewLine] [-AsSecureString $AsSecureString] [-MaskInput $MaskInput] [-NotNull $NotNull] [-HideInput $HideInput]
     .NOTES
         AUTHOR  Alexk
         CREATED 26.12.20
@@ -3683,19 +3744,29 @@ Function Get-Answer {
     )
 
     function Test-TypeAllowed ( $Res, [String[]] $AllowType ) {
+    <#
+        .SYNOPSIS
+            Test type allowed
+        .EXAMPLE
+            Test-TypeAllowed
+        .NOTES
+            AUTHOR  Alexk
+            CREATED 17.01.21
+            VER     1
+    #>
         if ( $AllowType -and $res ){
             $AllowedType = $false
             foreach ( $type in $AllowType ){
                 switch ( $type ) {
-                    "string" {  
+                    "string" {
                         try {
                             $Res.ToString()
-                            $AllowedType = $true                            
+                            $AllowedType = $true
                             break
                         }
                         Catch{}
                     }
-                    "int" {  
+                    "int" {
                         try {
                             $Res.ToInt64()
                             $AllowedType = $true
@@ -3703,7 +3774,7 @@ Function Get-Answer {
                         }
                         Catch{}
                     }
-                    "URI" {  
+                    "URI" {
                         try {
                             [URI]$Res
                             $AllowedType = $true
@@ -3722,6 +3793,16 @@ Function Get-Answer {
         return $AllowedType
     }
     function Test-Format ( $Res, $FormatRegex ) {
+    <#
+        .SYNOPSIS
+            Test format
+        .EXAMPLE
+            Test-Format
+        .NOTES
+            AUTHOR  Alexk
+            CREATED 17.01.21
+            VER     1
+    #>
         if ( $FormatRegex -and $Res ) {
             $Formatted = $Res -match $FormatRegex
         }
@@ -3731,10 +3812,20 @@ Function Get-Answer {
 
         return $Formatted
     }
-    Function Get-OutputString ( $Color, $AllowType, $Format, $Title, $Example, $ChoseFromString, $DefaultChoose, [Switch] $ReadOnNewLine, $NotNull, $MaskInput ){        
+    Function Get-OutputString ( $Color, $AllowType, $Format, $Title, $Example, $ChoseFromString, $DefaultChoose, [Switch] $ReadOnNewLine, $NotNull, $MaskInput ){
+    <#
+        .SYNOPSIS
+            Get output string
+        .EXAMPLE
+            Get-OutputString
+        .NOTES
+            AUTHOR  Alexk
+            CREATED 17.01.21
+            VER     1
+    #>
         if ( $color ) {
             $ColorString = @()
-            
+
             if ( $Format ){
                 $PSO = [PSCustomObject]@{
                     String = "[format]"
@@ -3749,7 +3840,7 @@ Function Get-Answer {
                     Color  = $Color[1]
                 }
                 $ColorString     += $PSO
-            }            
+            }
             if ( $Title ) {
                 $PSO = [PSCustomObject]@{
                     String = $Title
@@ -3789,7 +3880,7 @@ Function Get-Answer {
                 Color  = $Color[0]
             }
             $ColorString     += $PSO
-            
+
             foreach ( $String in $ColorString ){
                 write-host -Object $String.string -NoNewline -ForegroundColor $String.Color
             }
@@ -3802,7 +3893,7 @@ Function Get-Answer {
             If ( $AllowType ) {
                 $AllowedTypeList = $AllowType -join ", "
                 $OutString = $OutString + "[$AllowedTypeList] "
-            }            
+            }
             if ( $Title ) {
                 $OutString = $OutString + $Title
             }
@@ -3819,7 +3910,7 @@ Function Get-Answer {
 
         if ( $ReadOnNewLine ) {
             write-host ""
-        } 
+        }
         if ( $ChoseFromString ) {
             $Res = Read-Host
             if ( $DefaultChoose ){
@@ -3831,22 +3922,22 @@ Function Get-Answer {
         }
         Else {
             if ( !$NotNull ) {
-                if ( $MaskInput) {                
+                if ( $MaskInput) {
                     $res = Read-Host -MaskInput
                 }
-                ElseIf ( $AsSecureString ) {                        
+                ElseIf ( $AsSecureString ) {
                     $res = Read-Host -AsSecureString
                 }
                 Else {
                     $res = Read-Host
-                }            
+                }
             }
             Else {
                 while ( !$Res ) {
-                    if ( $MaskInput) {                
+                    if ( $MaskInput) {
                         $res = Read-Host -MaskInput
                     }
-                    ElseIf ( $AsSecureString ) {                        
+                    ElseIf ( $AsSecureString ) {
                         $res = Read-Host -AsSecureString
                     }
                     Else {
@@ -3857,7 +3948,7 @@ Function Get-Answer {
                     }
                 }
             }
-        }        
+        }
 
         return $Res
     }
@@ -3866,7 +3957,7 @@ Function Get-Answer {
 
     write-host ""
     write-host "============================="
-    
+
     $Formatted   = $false
     if ( $Format ) {
         switch ( $Format ) {
@@ -3882,21 +3973,21 @@ Function Get-Answer {
             Default { }
         }
         try {
-            $FormatRegex = [regex]::new( $Format )            
+            $FormatRegex = [regex]::new( $Format )
         }
         Catch {
             write-host "Error in format [$format] regex!" -ForegroundColor Red
             $FormatRegex = $null
             $Format      = $null
         }
-        
-    }    
+
+    }
 
     $AllowedType = $false
 
     while ( !$AllowedType -or !$Formatted ) {
         if ( $ChooseFrom ) {
-        
+
             $OptionSeparator = "/"
             $ChoseFromString = ""
 
@@ -3923,11 +4014,11 @@ Function Get-Answer {
 
             while ( $res -notin $ChooseFromUpper ) {
                 $Res = Get-OutputString -color $Color -AllowType $AllowType -Format $Format -Title $Title -Example $Example -ChoseFromString $ChoseFromString -DefaultChoose $DefaultChoose -NotNull $NotNull -MaskInput $MaskInput
-               
-            }            
+
+            }
         }
         Else {
-            $Res = Get-OutputString -color $Color -AllowType $AllowType -Format $Format -Title $Title -Example $Example -ChoseFromString $ChoseFromString -DefaultChoose $DefaultChoose -NotNull $NotNull -MaskInput $MaskInput           
+            $Res = Get-OutputString -color $Color -AllowType $AllowType -Format $Format -Title $Title -Example $Example -ChoseFromString $ChoseFromString -DefaultChoose $DefaultChoose -NotNull $NotNull -MaskInput $MaskInput
         }
 
         $AllowedType = Test-TypeAllowed -Res $Res -AllowType $AllowType
@@ -3941,15 +4032,15 @@ Function Get-Answer {
             write-host "Unexpected result format, allowed only [$FormatRegex] " -ForegroundColor Red
             $Res = $null
         }
-    } 
-    
+    }
+
     if ( !$HideInput ){
         if ( $color ) {
             if ( $MaskInput -or $AsSecureString ){
                 Write-Host -Object "Selected: " -ForegroundColor $Color[0] -NoNewline
                 Write-Host -Object "*" -ForegroundColor $Color[1] -NoNewline
             }
-            Else {        
+            Else {
                 write-host -object "Selected: " -ForegroundColor $Color[0] -NoNewline
                 write-host -object "$Res" -ForegroundColor $Color[1] -NoNewline
             }
@@ -3958,7 +4049,7 @@ Function Get-Answer {
             if ( $MaskInput -or $AsSecureString ) {
                 Write-Host -Object "Selected: *"
             }
-            Else {        
+            Else {
                 Write-Host -Object "Selected: $Res"
             }
         }
