@@ -1,4 +1,4 @@
-<#
+﻿<#
     .SYNOPSIS
         AlexK utility module.
     .DESCRIPTION
@@ -960,7 +960,7 @@ Global state: $($StateObject.GlobalState)
     Else {
         switch ($AlertType.ToLower()) {
             "telegram" {
-                if ($Global:TelegramParameters) {
+                if ($Global:gsPlugins.SelectPlugin("telegram")) {
                     Send-Alert -Plugin $Global:gsPlugins.SelectPlugin("telegram") -AlertMessage $AlertMessage
                 }
                 Else {
