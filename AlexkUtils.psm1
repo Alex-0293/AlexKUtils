@@ -246,6 +246,36 @@ Function Get-VarToString {
     }
     return $Res
 }
+
+Function Get-AESData {
+    <#
+    .DESCRIPTION
+        Function to read data from AES settings.
+#>
+    [OutputType([SecureString])]
+    [CmdletBinding()]
+    param
+    (
+        [Parameter(Mandatory = $true, Position = 0, HelpMessage = "AES data file path." )]
+        [ValidateNotNullOrEmpty()]
+        [string] $DataFilePath,
+        [Parameter(Mandatory = $true, Position = 1, HelpMessage = "AES data file type." )]
+        [ValidateNotNullOrEmpty()]
+        [string] $DataFileType
+    )
+
+    switch ( $DataFileType ) {
+        "Account" { 
+            $Settings          = Get-VarFromAESFile -VarFilePath $DataFilePath
+            $Settings          = Get-VarToString -Var $Settings
+            $Settings.Password = ConvertTo-SecureString -AsPlainText $Settings.Password -Force
+            $Res               = New-Object -TypeName System.Management.Automation.PSCredential -ArgumentList ($Settings.UserName), ($Settings.Password)
+        }
+        Default {}
+    }
+
+    return  $Res
+}
 #endregion
 #region VPN
 Function Connect-VPN {
@@ -1918,12 +1948,15 @@ function Invoke-PSScriptBlock {
                 If ( $NewSession ) {
                     $Global:modSessionParams = $StartParams
                     try {
-                        $Global:modSession       = New-PSSession @StartParams -UseSSL
-                        Write-host "Create new https session $($Global:modSession.id)." -ForegroundColor green
+                        Write-Host "Creating new https session $($Global:modSession.id)." -ForegroundColor green
+                        $Global:modSession       = New-PSSession @StartParams -UseSSL -ErrorVariable LastError -ErrorAction stop
                     }
                     Catch {
+                        if ( $LastError ) {
+                            Add-ToLog -Message $LastError.ErrorRecord -logFilePath $Global:gsScriptLogFilePath -Display -Status "Error"
+                        }
+                        Write-host "Creating new http session $($Global:modSession.id)." -ForegroundColor green
                         $Global:modSession       = New-PSSession @StartParams
-                        Write-host "Create new http session $($Global:modSession.id)." -ForegroundColor green
                     }
                     $Global:modPSSessionCounter ++
                 }
@@ -1943,29 +1976,35 @@ function Invoke-PSScriptBlock {
                         if ( $Diff ){
                             $Global:modSessionParams = $StartParams
                             try {
-                                $Global:modSession       = New-PSSession @StartParams -UseSSL
-                                Write-host "Create new https session $($Global:modSession.id)." -ForegroundColor green
+                                Write-Host "Creating new https session $($Global:modSession.id)." -ForegroundColor green
+                                $Global:modSession       = New-PSSession @StartParams -UseSSL -ErrorVariable LastError -ErrorAction stop
                             }
                             Catch {
+                                if ( $LastError ) {
+                                    Add-ToLog -Message $LastError.ErrorRecord -logFilePath $Global:gsScriptLogFilePath -Display -Status "Error"
+                                }
+                                Write-host "Creating new http session $($Global:modSession.id)." -ForegroundColor green
                                 $Global:modSession       = New-PSSession @StartParams
-                                Write-host "Create new http session $($Global:modSession.id)." -ForegroundColor green
                             }
                             $Global:modPSSessionCounter ++
                             
                         }
                         Else {
-                            Write-verbose "Reuse session $($Global:modSession.id)."
+                            Write-host "Reuse session $($Global:modSession.id)."
                         }
                     }
                     Else {
                         $Global:modSessionParams = $StartParams
                         try {
-                            $Global:modSession       = New-PSSession @StartParams -UseSSL
-                            Write-host "Create new https session $($Global:modSession.id)." -ForegroundColor green
+                            Write-Host "Creating new https session $($Global:modSession.id)." -ForegroundColor green
+                            $Global:modSession       = New-PSSession @StartParams -UseSSL -ErrorVariable LastError -ErrorAction stop
                         }
                         Catch {
+                            if ( $LastError ) {
+                                Add-ToLog -Message $LastError.ErrorRecord -logFilePath $Global:gsScriptLogFilePath -Display -Status "Error"
+                            }
+                            Write-host "Creating new http session $($Global:modSession.id)." -ForegroundColor green
                             $Global:modSession       = New-PSSession @StartParams
-                            Write-host "Create new http session $($Global:modSession.id)." -ForegroundColor green
                         }
                         $Global:modPSSessionCounter ++
                     }
@@ -2001,8 +2040,13 @@ function Invoke-PSScriptBlock {
     if ( $Global:modSession ) {
         if ( $ExportedParameters ){
             Set-Variable -Name "GlobalExportedParameters" -Value $ExportedParameters -Scope "Global" #-Visibility Private
-            $GlobalExportedParameters.Remove("Computer")    | Out-Null
-            $GlobalExportedParameters.Remove("Credentials") | Out-Null
+            try {
+                $GlobalExportedParameters.Remove("Computer")    | Out-Null
+                $GlobalExportedParameters.Remove("Credentials") | Out-Null
+            }
+            Catch {
+                
+            }
 
             $NewStrings = '
                 $Params = $Using:GlobalExportedParameters
@@ -2036,6 +2080,11 @@ function Invoke-PSScriptBlock {
                 foreach ( $Item in $GlobalExportedParameters.keys ) {
                     $ArgsArray += ,$GlobalExportedParameters.$Item
                 }
+                # if ($ArgsArray.count -eq 0 ) {
+                #     foreach ( $Item in $GlobalExportedParameters ) {
+                #         $ArgsArray += ,$Item
+                #     }
+                # }
 
                 $Res = Invoke-Command -Session $Global:modSession -ScriptBlock $ScriptBlockWithExportedParams -ArgumentList $ArgsArray
             }
@@ -3759,7 +3808,7 @@ Function Get-Answer {
         [Parameter(Mandatory = $false, Position = 2, HelpMessage = "Default option." )]
         [string] $DefaultChoose,
         [Parameter(Mandatory = $false, Position = 3, HelpMessage = "Firs color - text, second options and parameters, third color examples." )]
-        [String[]] $Color,
+        [String[]] $Color = @("Cyan", "DarkMagenta", "Magenta"),
         [Parameter(Mandatory = $false, Position = 4, HelpMessage = "Array of allowed result types." )]
         [String[]] $AllowType,
         [Parameter(Mandatory = $false, Position = 5, HelpMessage = "Array of allowed result types." )]
@@ -4378,7 +4427,7 @@ function Get-ErrorReporting {
 # }
 #>
 
-Export-ModuleMember -Function Get-NewAESKey, Get-VarFromAESFile, Set-VarToAESFile, Disconnect-VPN, Connect-VPN, Add-ToLog, Restart-Switches, Restart-SwitchInInterval, Get-EventList, Send-Email, Start-PSScript, Restart-LocalHostInInterval, Show-Notification, Restart-ServiceInInterval, New-TelegramMessage, Get-SettingsFromFile, Get-HTMLTable, Get-HTMLCol, Get-ContentFromHTMLTemplate, Get-ErrorReporting, Get-CopyByBITS, Show-OpenDialog, Import-ModuleRemotely, Invoke-PSScriptBlock, Get-ACLArray, Set-PSModuleManifest, Get-VarToString, Get-UniqueArrayMembers, Resolve-IPtoFQDNinArray, Get-HelpersData, Get-DifferenceBetweenArrays, Test-Credentials, Convert-FSPath, Start-Program, Test-ElevatedRights, Invoke-CommandWithDebug, Format-TimeSpan, Start-ParallelPortPing, Join-Array, Set-State, Send-Alert, Start-Module, Convert-SpecialCharacters, Get-ListByGroups, Convert-StringToDigitArray, Convert-PSCustomObjectToHashTable, Invoke-TrailerIncrease, Split-words, Remove-Modules, Get-TextLengthPreview, Export-RegistryToFile, Show-ColoredTable, Get-Answer
+Export-ModuleMember -Function Get-NewAESKey, Get-VarFromAESFile, Set-VarToAESFile, Disconnect-VPN, Connect-VPN, Add-ToLog, Restart-Switches, Restart-SwitchInInterval, Get-EventList, Send-Email, Start-PSScript, Restart-LocalHostInInterval, Show-Notification, Restart-ServiceInInterval, New-TelegramMessage, Get-SettingsFromFile, Get-HTMLTable, Get-HTMLCol, Get-ContentFromHTMLTemplate, Get-ErrorReporting, Get-CopyByBITS, Show-OpenDialog, Import-ModuleRemotely, Invoke-PSScriptBlock, Get-ACLArray, Set-PSModuleManifest, Get-VarToString, Get-UniqueArrayMembers, Resolve-IPtoFQDNinArray, Get-HelpersData, Get-DifferenceBetweenArrays, Test-Credentials, Convert-FSPath, Start-Program, Test-ElevatedRights, Invoke-CommandWithDebug, Format-TimeSpan, Start-ParallelPortPing, Join-Array, Set-State, Send-Alert, Start-Module, Convert-SpecialCharacters, Get-ListByGroups, Convert-StringToDigitArray, Convert-PSCustomObjectToHashTable, Invoke-TrailerIncrease, Split-words, Remove-Modules, Get-TextLengthPreview, Export-RegistryToFile, Show-ColoredTable, Get-Answer,  Get-AESData
 
 <#
 
