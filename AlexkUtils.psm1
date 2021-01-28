@@ -1906,6 +1906,10 @@ function Invoke-PSScriptBlock {
                 if ( $SessionOptions ) {
                     $StartParams += @{ SessionOption = $SessionOptions }
                 }
+                # Else {
+                #     $SessionOptions = New-PSSessionOption -SkipCACheck
+                #     $StartParams += @{ SessionOption = $SessionOptions }
+                # }
 
                 if ( $Credentials ) {
                     $StartParams += @{ Credential = $Credentials }
@@ -1913,9 +1917,15 @@ function Invoke-PSScriptBlock {
 
                 If ( $NewSession ) {
                     $Global:modSessionParams = $StartParams
-                    $Global:modSession       = New-PSSession @StartParams
+                    try {
+                        $Global:modSession       = New-PSSession @StartParams -UseSSL
+                        Write-host "Create new https session $($Global:modSession.id)." -ForegroundColor green
+                    }
+                    Catch {
+                        $Global:modSession       = New-PSSession @StartParams
+                        Write-host "Create new http session $($Global:modSession.id)." -ForegroundColor green
+                    }
                     $Global:modPSSessionCounter ++
-                    Write-verbose "Create new session $($Global:modSession.id)."
                 }
                 Else {
                     if ( $Global:modSession ) {
@@ -1932,9 +1942,16 @@ function Invoke-PSScriptBlock {
                         }
                         if ( $Diff ){
                             $Global:modSessionParams = $StartParams
-                            $Global:modSession       = New-PSSession @StartParams
+                            try {
+                                $Global:modSession       = New-PSSession @StartParams -UseSSL
+                                Write-host "Create new https session $($Global:modSession.id)." -ForegroundColor green
+                            }
+                            Catch {
+                                $Global:modSession       = New-PSSession @StartParams
+                                Write-host "Create new http session $($Global:modSession.id)." -ForegroundColor green
+                            }
                             $Global:modPSSessionCounter ++
-                            Write-verbose "Create new session $($Global:modSession.id)."
+                            
                         }
                         Else {
                             Write-verbose "Reuse session $($Global:modSession.id)."
@@ -1942,9 +1959,15 @@ function Invoke-PSScriptBlock {
                     }
                     Else {
                         $Global:modSessionParams = $StartParams
-                        $Global:modSession       = New-PSSession @StartParams
+                        try {
+                            $Global:modSession       = New-PSSession @StartParams -UseSSL
+                            Write-host "Create new https session $($Global:modSession.id)." -ForegroundColor green
+                        }
+                        Catch {
+                            $Global:modSession       = New-PSSession @StartParams
+                            Write-host "Create new http session $($Global:modSession.id)." -ForegroundColor green
+                        }
                         $Global:modPSSessionCounter ++
-                        Write-verbose "Create new session $($Global:modSession.id)."
                     }
                 }
 
@@ -3499,19 +3522,21 @@ function Show-ColoredTable {
         [String] $Title,
         [Parameter( Mandatory = $false, Position = 6, HelpMessage = "Add row numbers.", ParameterSetName = "Color" )]
         [switch] $AddRowNumbers,
-        [Parameter( Mandatory = $false, Position = 7, HelpMessage = "Select message.")]
+        [Parameter( Mandatory = $false, Position = 7, HelpMessage = "Select field.")]
         [string] $SelectField,
         [Parameter( Mandatory = $false, Position = 8, HelpMessage = "Select message.")]
         [string] $SelectMessage,
         [Parameter( Mandatory = $false, Position = 8, HelpMessage = "Allow only not null results.")]
         [switch] $NotNull,
-        [Parameter( Mandatory = $false, Position = 9, HelpMessage = "Add new line at the end.", ParameterSetName = "Color" )]
+        [Parameter( Mandatory = $false, Position = 9, HelpMessage = "Allow only single result.")]
+        [switch] $Single,
+        [Parameter( Mandatory = $false, Position = 10, HelpMessage = "Add new line at the end.", ParameterSetName = "Color" )]
         [switch] $AddNewLine,
-        [Parameter( Mandatory = $false, Position = 10, HelpMessage = "Return object.", ParameterSetName = "Color" )]
+        [Parameter( Mandatory = $false, Position = 11, HelpMessage = "Return object.", ParameterSetName = "Color" )]
         [switch] $PassThru
     )
 
-    Write-Host "============================="
+    Write-Host "=============================" -ForegroundColor $Color[0]
 
     If ( !$View ){
         $View = "*"
@@ -3579,7 +3604,7 @@ function Show-ColoredTable {
             $Counter = 1
             $Result = @()
             foreach ( $item in $Data ) {
-                $item | Add-Member -MemberType NoteProperty -Name "Num" -Value "$Counter"
+                $item | Add-Member -MemberType NoteProperty -Name "Num" -Value $Counter -ErrorAction SilentlyContinue
                 $Result  += $item
                 $Counter ++
             }
@@ -3650,7 +3675,17 @@ function Show-ColoredTable {
             while( !$Selected -and $data ){
                 $Selected       = Read-Host
                 if ( !$Selected -and $data ){
-                    write-host "Select correct number!" -ForegroundColor red
+                    write-host "Select correct number! 0 to exit." -ForegroundColor red
+                    Write-Host $SelectMessage -NoNewline -ForegroundColor $Color[0]
+                }
+                Else {
+                    if ( $Single ){
+                        if ( $Selected.Contains("-") -or $Selected.Contains("*")  -or $Selected.Contains(",") ) {
+                            $Selected = $null
+                            write-host "Allow only single value!" -ForegroundColor red
+                            Write-Host $SelectMessage -NoNewline -ForegroundColor $Color[0]
+                        }
+                    }
                 }
             }
 
@@ -3956,7 +3991,7 @@ Function Get-Answer {
     $Res = $null
 
     write-host ""
-    write-host "============================="
+    write-host "=============================" -ForegroundColor $Color[0]
 
     $Formatted   = $false
     if ( $Format ) {
