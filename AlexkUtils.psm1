@@ -1,4 +1,4 @@
-<#
+﻿<#
     .SYNOPSIS
         AlexK utility module.
     .DESCRIPTION
@@ -745,12 +745,14 @@ Function Add-ToLog {
         [string] $Format,
         [Parameter(Mandatory = $false, Position =6, HelpMessage = "Level in string hierarchy." )]
         [int16] $Level,
-        [Parameter(Mandatory = $false, Position =7, HelpMessage = "Display log name." )]
+        [Parameter(Mandatory = $false, Position =7, HelpMessage = "Action category." )]
+        [string] $Category,
+        [Parameter(Mandatory = $false, Position =8, HelpMessage = "Display log name." )]
         [switch] $ShowLogName
     )
     if ( -not $Global:modSuppressOutput ) {
-        if (-not $Level) {
-            if($Global:gsParentLevel){
+        if ( -not $PSBoundParameters.ContainsKey("Level") ) {
+            if( -not $Global:gsParentLevel ){
                 [int16] $Level = [int16] $Global:gsParentLevel + 1
             }
         }
@@ -786,7 +788,7 @@ Function Add-ToLog {
         if ($Level){
             [string]$LevelSign       = " "
             [int16] $LevelMultiplier = 4
-            for ($i = 0; $i -lt ($Level*$LevelMultiplier); $i++) {
+            foreach ( $item in (1..($Level * $LevelMultiplier - 1))) {
                 $LevelText += $LevelSign
             }
         }
@@ -803,32 +805,24 @@ Function Add-ToLog {
             }
             for ($i = 1; $i -le $Global:gsScriptOperationTry; $i++) {
                 try {
-                    $Data = @()
                     $PSO = [PSCustomObject]@{
-                        DateTime  = Get-Date
-                        Status    = $Status.ToLower()
-                        Message   = $Message
+                        DateTime = Get-Date
+                        Level    = $Level
+                        Category = $Category
+                        Status   = $Status.ToLower()                        
+                        Location = ( Get-PSCallStack | Select-Object -SkipLast 1 | Select-Object -Last 1 ).Location.replace(" line ","") 
+                        Message  = $Message
                     }
-                    $XMLLogPath = "$logFilePath.xml"
+                    $FilePath = "$logFilePath.csv"
 
                     switch ($Mode.ToLower()) {
                     "append" {
                         Out-File -FilePath $logFilePath -Encoding utf8 -Append -Force -InputObject $Text
-                        if ( test-path -path $XMLLogPath ){
-                            $CSVData = import-cliXML -path $XMLLogPath
-                            $Data += $CSVData
-                            $Data += $PSO
-                            $Data | Export-CliXML -path $XMLLogPath
-                        }
-                        Else {
-                            $Data += $PSO
-                            $Data |  Export-CliXML -path $XMLLogPath
-                        }
+                        Add-ToDataFile -Data $PSO -FilePath $FilePath -DontCheckStructure
                     }
                     "replace" {
                         Out-File -FilePath $logFilePath -Encoding utf8 -Force -InputObject $Text
-                        $Data += $PSO
-                        $Data |  Export-CliXML -path $XMLLogPath
+                        Add-ToDataFile -data $PSO -FilePath $FilePath -Replace -DontCheckStructure
                     }
                         Default { }
                     }
@@ -947,35 +941,30 @@ Function Set-State {
 #>
     [CmdletBinding()]
     Param (
-        [Parameter( Mandatory = $true, Position = 1, HelpMessage = "State object." )]
+        [Parameter( Mandatory = $true, Position = 0, HelpMessage = "State object." )]
         [PSCustomObject] $StateObject,
-        [Parameter( Mandatory = $true, Position = 2, HelpMessage = "State file path." )]
+        [Parameter( Mandatory = $true, Position = 1, HelpMessage = "State file path." )]
         [String] $StateFilePath,
-        [Parameter( Mandatory = $false, Position = 3, HelpMessage = "Send alert to." )]
+        [Parameter( Mandatory = $false, Position = 2, HelpMessage = "Send alert to." )]
         [string] $AlertType,
-        [Parameter( Mandatory = $false, Position = 4, HelpMessage = "Alert only on global state change." )]
+        [Parameter( Mandatory = $false, Position = 3, HelpMessage = "Alert only on global state change." )]
         [switch] $AlertOnChange,
-        [Parameter( Mandatory = $false, Position = 5, HelpMessage = "Save only on global state change." )]
+        [Parameter( Mandatory = $false, Position = 4, HelpMessage = "Save only on global state change." )]
         [switch] $SaveOnChange
     )
 
     if (Test-Path -path $StateFilePath) {
-        if ( $StateFilePath.ToLower().contains("csv") ) {
-            $States = import-Csv -Path $StateFilePath
-        }
-        ElseIf ( $StateFilePath.ToLower().contains("xml") ) {
-            $States = Import-Clixml -Path $StateFilePath
-        }
+        $States = Get-FromDataFile -FilePath $StateFilePath
     }
     Else {
         $States = @()
     }
 
-    $LastState        = $States | Select-Object -Last 1
-    $StateChanged     = $LastState.State -ne $StateObject.State
-    $StateObject.date = Get-Date
-    $AlertMessage     = @"
-$($StateObject.Application)@$($StateObject.Host)[$(Get-Date $StateObject.date -Format HH:mm)]
+    $LastState            = $States | Select-Object -Last 1
+    $StateChanged         = ( $LastState.State -ne $StateObject.State ) -or ( $LastState.GlobalState -ne $StateObject.GlobalState ) -or ( -not $LastState ) 
+    $StateObject.DateTime = Get-Date
+    $AlertMessage         = @"
+$($StateObject.Application)@$($StateObject.Host)[$(Get-Date $StateObject.DateTime -Format HH:mm)]
 $($StateObject.Action)
 $($StateObject.State)
 Global state: $($StateObject.GlobalState)
@@ -1012,23 +1001,11 @@ Global state: $($StateObject.GlobalState)
 
     if ( $SaveOnChange ) {
         if ($StateChanged) {
-            [array] $States += $StateObject
-            if ( $StateFilePath.ToLower().contains("csv") ) {
-                $States | ConvertTo-Csv -NoTypeInformation | Out-File -FilePath $StateFilePath -Force
-            }
-            ElseIf ( $StateFilePath.ToLower().contains("xml") ) {
-                $States | Export-Clixml -Path $StateFilePath -Force
-            }
+            Add-ToDataFile -FilePath $StateFilePath -Data $StateObject
         }
     }
     Else {
-        [array] $States += $StateObject
-        if ( $StateFilePath.ToLower().contains("csv") ) {
-            $States | ConvertTo-Csv -NoTypeInformation | Out-File -FilePath $StateFilePath -Force
-        }
-        ElseIf ( $StateFilePath.ToLower().contains("xml") ) {
-            $States | Export-Clixml -Path $StateFilePath -Force
-        }
+        Add-ToDataFile -FilePath $StateFilePath -Data $StateObject
     }
 }
 Function Send-Email {
@@ -1704,7 +1681,7 @@ Function Compare-Arrays {
         }
         $CompareArrayProperty = Compare-Object -ReferenceObject $Array1PropertyType -DifferenceObject $Array2PropertyType -Property "name", "type"
         if ( $CompareArrayProperty ) {
-            Add-ToLog -Message "Arrays have different structure [$CompareArrayProperty]!" -logFilePath $Global:gsScriptLogFilePath -Display -Status "error"
+            Add-ToLog -Message "Arrays have different structure [$($CompareArrayProperty | out-string)]!" -logFilePath $Global:gsScriptLogFilePath -Display -Status "error"
             return $false
         }
 
@@ -4319,7 +4296,9 @@ Function Add-ToDataFile {
         [switch] $Replace,
         [Parameter( Mandatory = $false, Position = 3, HelpMessage = "Replace data in file." )]
         [switch] $Remove,
-        [Parameter( Mandatory = $false, Position = 4, HelpMessage = "Return object." )]
+        [Parameter( Mandatory = $false, Position = 4, HelpMessage = "Allow data with different structure." )]
+        [switch] $DontCheckStructure,
+        [Parameter( Mandatory = $false, Position = 5, HelpMessage = "Return object." )]
         [switch] $PassThru
     )
     begin {
@@ -4389,7 +4368,7 @@ Function Add-ToDataFile {
         if ( $FileMembers ) {
             $DataMembers =  ($Data |  get-member -MemberType NoteProperty | where-object { $_.name -ne "Value"}).name | Select-Object -Unique
             $Compare = Compare-Object -ReferenceObject $DataMembers -DifferenceObject $Filemembers -Property $DataMembers.name
-            if ( $Compare ){
+            if ( $Compare -and ( -not $DontCheckStructure) ){
                 Add-ToLog -Message "There is a difference between data properties and file properties! `n $Compare" -logFilePath $Global:gsScriptLogFilePath -Display -Status "Error"
                 if ( $PassThru ){
                     $res =  $false
@@ -4398,7 +4377,7 @@ Function Add-ToDataFile {
         }
     }
     process {
-        if ( -not $compare ){
+        if ( ( -not $compare ) -or ( $DontCheckStructure )){
             if ( $FileData ){
                 $Array += $FileData
             }
@@ -4418,7 +4397,16 @@ Function Add-ToDataFile {
                 $Array = $Array1
             }
             Else {
-                $Array += $Data
+                if ( $Compare ) {
+                    $Diff = $compare | Where-Object {$_.sideindicator -eq "<="}
+                    foreach ( $item in $diff ){
+                        $Array | Add-Member -NotePropertyName $item.InputObject -NotePropertyValue ""
+                    }
+                    $Array += $Data
+                }
+                Else {
+                    $Array += $Data
+                }
             }
 
             switch ( $FileExtention ) {
@@ -4714,14 +4702,14 @@ function Get-ErrorReporting {
     [string]$line              = $Trap.InvocationInfo.ScriptLineNumber
     [string]$Script            = $Trap.InvocationInfo.ScriptName
     [string]$StackTrace        = $Trap.ScriptStackTrace
-    [array]  $UpDownStackTrace = @($StackTrace.Split("`n"))
-    [int16]  $ItemCount        = $UpDownStackTrace.Count
-    [array]  $TempStackTrace   = @(1..$ItemCount )
+    [array] $UpDownStackTrace  = @($StackTrace.Split("`n"))
+    [int16] $ItemCount         = $UpDownStackTrace.Count
+    [array] $TempStackTrace    = @(1..$ItemCount )
 
     foreach ($item in $UpDownStackTrace) {
         $Data = $Item.Split(",")
         $TempStackTrace[$ItemCount - 1]  = "$($Data[0]), `"$($Data[1].trim())`""
-                        $ItemCount      -= 1
+        $ItemCount      -= 1
     }
     $UpDownStackTrace = $TempStackTrace -join "`n"
 
