@@ -1,4 +1,4 @@
-﻿<#
+<#
     .SYNOPSIS
         AlexK utility module.
     .DESCRIPTION
@@ -11,13 +11,14 @@
     .NOTES
         AUTHOR  Alexk
         CREATED 25.04.19
-        MOD     05.11.20
-        VER     5
+        MOD     08.02.21
+        VER     6
 #>
 
 
 [bool] $Global:modSuppressOutput   = $false
 [int]  $Global:modPSSessionCounter = 0
+[array]  $Global:modGroupListArray = @()
 
 #region AES
 function Get-NewAESKey {
@@ -248,9 +249,17 @@ Function Get-VarToString {
 }
 
 Function Get-AESData {
-    <#
+<#
+    .SYNOPSIS
+        Get AES data
     .DESCRIPTION
         Function to read data from AES settings.
+    .EXAMPLE
+        Get-AESData -DataFilePath $DataFilePath -DataFileType $DataFileType
+    .NOTES
+        AUTHOR  Alexk
+        CREATED 28.01.21
+        VER     1
 #>
     [OutputType([SecureString])]
     [CmdletBinding()]
@@ -265,7 +274,7 @@ Function Get-AESData {
     )
 
     switch ( $DataFileType ) {
-        "Account" { 
+        "Account" {
             $Settings          = Get-VarFromAESFile -VarFilePath $DataFilePath
             $Settings          = Get-VarToString -Var $Settings
             $Settings.Password = ConvertTo-SecureString -AsPlainText $Settings.Password -Force
@@ -1650,6 +1659,70 @@ Function Join-Array {
 
     return $Output
 }
+Function Compare-Arrays {
+<#
+    .SYNOPSIS
+        Compare arrays
+    .DESCRIPTION
+        Function to compare two arrays. If equal return $true else $false.
+    .EXAMPLE
+        Compare-Arrays -Array1 $Array1 -Array2 $Array2
+    .NOTES
+        AUTHOR  Alexk
+        CREATED 08.02.21
+        VER     1
+#>
+    [OutputType([bool])]
+    [CmdletBinding()]
+    Param(
+        [Parameter( Mandatory = $true, Position = 0, HelpMessage = "Array 1." )]
+        [ValidateNotNullOrEmpty()]
+        [PSObject[]] $Array1,
+        [Parameter( Mandatory = $true, Position = 1, HelpMessage = "Array 2." )]
+        [ValidateNotNullOrEmpty()]
+        [PSObject[]] $Array2
+    )
+    begin {
+        $Array1Property     = ($Array1 | get-member -MemberType NoteProperty).name
+        $Array1PropertyType = @()
+        foreach ( $Property in $Array1Property ){
+            $PSO = [PSCustomObject]@{
+                Name = $Property
+                Type = $Array1[0].$Property.gettype()
+            }
+            $Array1PropertyType += $PSO
+        }
+
+        $Array2Property = ($Array2 | get-member -MemberType NoteProperty).name
+        $Array2PropertyType = @()
+        foreach ( $Property in $Array2Property ){
+            $PSO = [PSCustomObject]@{
+                Name = $Property
+                Type = $Array2[0].$Property.gettype()
+            }
+            $Array2PropertyType += $PSO
+        }
+        $CompareArrayProperty = Compare-Object -ReferenceObject $Array1PropertyType -DifferenceObject $Array2PropertyType -Property "name", "type"
+        if ( $CompareArrayProperty ) {
+            Add-ToLog -Message "Arrays have different structure [$CompareArrayProperty]!" -logFilePath $Global:gsScriptLogFilePath -Display -Status "error"
+            return $false
+        }
+
+    }
+    process {
+        $CompareArray = Compare-Object -ReferenceObject $Array1 -DifferenceObject $Array1 -Property $Array1Property
+        if ( $CompareArray ) {
+            return $false
+        }
+        Else {
+            return $true
+        }
+    }
+    end {
+
+    }
+}
+
 #endregion
 #region Invoke
 Function Start-PSScript {
@@ -1849,7 +1922,7 @@ function Import-ModuleRemotely {
         [string]   $Global:gsScriptLocalHost     = $using:gsScriptLocalHost
         [array]    $Global:gsLogBuffer           = @()
         [string]   $Global:gsScriptLogFilePath   = $using:gsScriptLogFilePath
-        [string]   $Global:gsParentLevel         = $using:gsParentLevel
+        [int16 ]   $Global:gsParentLevel         = $using:gsParentLevel
         [string]   $Global:gsLogFileNamePosition = $using:gsLogFileNamePosition
         $Global:gsRunningCredentials             = [System.Security.Principal.WindowsIdentity]::GetCurrent()
 
@@ -1948,14 +2021,14 @@ function Invoke-PSScriptBlock {
                 If ( $NewSession ) {
                     $Global:modSessionParams = $StartParams
                     try {
-                        Write-Host "Creating new https session $($Global:modSession.id)." -ForegroundColor green
+                        Write-Host "Creating new https session." -ForegroundColor green
                         $Global:modSession       = New-PSSession @StartParams -UseSSL -ErrorVariable LastError -ErrorAction stop
                     }
                     Catch {
                         if ( $LastError ) {
                             Add-ToLog -Message $LastError.ErrorRecord -logFilePath $Global:gsScriptLogFilePath -Display -Status "Error"
                         }
-                        Write-host "Creating new http session $($Global:modSession.id)." -ForegroundColor green
+                        Write-host "Creating new http session." -ForegroundColor green
                         $Global:modSession       = New-PSSession @StartParams
                     }
                     $Global:modPSSessionCounter ++
@@ -1965,45 +2038,59 @@ function Invoke-PSScriptBlock {
                         $Diff = $False
                         foreach ( $Item in $Global:modSessionParams.Keys ){
                             if ( $Global:modSessionParams.$Item -ne $StartParams.$Item ) {
-                                $Diff = $True
+                                if ( $Item -ne "Credential" ) {
+                                    $Diff = $True
+                                }
+                                Else {
+                                    if ( $StartParams.$Item.UserName -ne $Global:modSessionParams.$Item.UserName  ) {
+                                        $Diff = $True
+                                    }
+                                }
                             }
                         }
                         foreach ( $Item in $StartParams.Keys ){
                             if ( $Global:modSessionParams.$Item -ne $StartParams.$Item ) {
-                                $Diff = $True
+                                if ( $Item -ne "Credential" ) {
+                                    $Diff = $True
+                                }
+                                Else {
+                                    if ( $StartParams.$Item.UserName -ne $Global:modSessionParams.$Item.UserName  ) {
+                                        $Diff = $True
+                                    }
+                                }
                             }
                         }
                         if ( $Diff ){
                             $Global:modSessionParams = $StartParams
                             try {
-                                Write-Host "Creating new https session $($Global:modSession.id)." -ForegroundColor green
+                                Write-Host "Creating new https session." -ForegroundColor green
                                 $Global:modSession       = New-PSSession @StartParams -UseSSL -ErrorVariable LastError -ErrorAction stop
                             }
                             Catch {
                                 if ( $LastError ) {
                                     Add-ToLog -Message $LastError.ErrorRecord -logFilePath $Global:gsScriptLogFilePath -Display -Status "Error"
                                 }
-                                Write-host "Creating new http session $($Global:modSession.id)." -ForegroundColor green
+                                Write-host "Creating new http session." -ForegroundColor green
                                 $Global:modSession       = New-PSSession @StartParams
                             }
                             $Global:modPSSessionCounter ++
-                            
+
                         }
                         Else {
-                            Write-host "Reuse session $($Global:modSession.id)."
+                            #Write-host "Reuse session $($Global:modSession.id)." -ForegroundColor green
                         }
                     }
                     Else {
                         $Global:modSessionParams = $StartParams
                         try {
-                            Write-Host "Creating new https session $($Global:modSession.id)." -ForegroundColor green
+                            Write-Host "Creating new https session." -ForegroundColor green
                             $Global:modSession       = New-PSSession @StartParams -UseSSL -ErrorVariable LastError -ErrorAction stop
                         }
                         Catch {
                             if ( $LastError ) {
                                 Add-ToLog -Message $LastError.ErrorRecord -logFilePath $Global:gsScriptLogFilePath -Display -Status "Error"
                             }
-                            Write-host "Creating new http session $($Global:modSession.id)." -ForegroundColor green
+                            Write-host "Creating new http session." -ForegroundColor green
                             $Global:modSession       = New-PSSession @StartParams
                         }
                         $Global:modPSSessionCounter ++
@@ -2028,7 +2115,7 @@ function Invoke-PSScriptBlock {
         if ( $Global:modSession ){
             Remove-PSSession $Global:modSession
             $Global:modPSSessionCounter --
-            Write-verbose "Remove session $($Global:modSession.id)."
+            Write-host "Remove session $($Global:modSession.id)." -ForegroundColor green
         }
         Get-ErrorReporting $_
         # Write-Host "Invoke-PSScriptBlock: Unable to establish remote session to $Computer" -ForegroundColor Red
@@ -2044,9 +2131,7 @@ function Invoke-PSScriptBlock {
                 $GlobalExportedParameters.Remove("Computer")    | Out-Null
                 $GlobalExportedParameters.Remove("Credentials") | Out-Null
             }
-            Catch {
-                
-            }
+            Catch {    }
 
             $NewStrings = '
                 $Params = $Using:GlobalExportedParameters
@@ -2096,7 +2181,7 @@ function Invoke-PSScriptBlock {
         if ( $NewSession ){
             Remove-PSSession $Session
             $Global:modPSSessionCounter --
-            Write-verbose "Remove session $($Global:modSession.id)."
+            Write-host "Remove session $($Global:modSession.id)." -ForegroundColor green
         }
     }
     Else {
@@ -2723,11 +2808,17 @@ function Get-ListByGroups {
         [PSObject[]] $SelectSource,
         [Parameter( Mandatory = $false, Position = 4, HelpMessage = "Select key field.", ParameterSetName = "Select")]
         [string] $SelectKey,
-        [Parameter( Mandatory = $False, Position = 5, HelpMessage = "Split words in menu.")]
+        [Parameter( Mandatory = $False, Position = 6, HelpMessage = "Split words in menu.")]
         [switch] $SplitWords,
-        [Parameter( Mandatory = $False, Position = 6, HelpMessage = "Return object.", ParameterSetName = "View")]
+        [Parameter( Mandatory = $False, Position = 7, HelpMessage = "Return object.", ParameterSetName = "View")]
         [switch] $PassThru
     )
+
+    write-host "[.\" -nonewline -ForegroundColor "magenta"
+    foreach ($item in $Global:modGroupListArray ) {
+        write-host "$item\" -nonewline -ForegroundColor "magenta"
+    }
+    write-host "]" -nonewline -ForegroundColor "magenta"
 
     if ( $Title ){
         Write-host -object $Title -ForegroundColor DarkBlue -NoNewLine
@@ -2778,7 +2869,18 @@ function Get-ListByGroups {
                 Else {
                     $GroupItem         = $Group[$Item]
                 }
-                $GroupItemSplitted = $GroupItem
+
+
+                if ( $Group[$Item] ){
+                    if ( $Group[$Item].contains("  ") ){
+                        $GroupItemSplitted = $GroupItem.toupper()
+                    }
+                    Else {
+                        $GroupItemSplitted = $GroupItem
+                    }
+                }
+
+
                 if ( $GroupItem ) {
                     $ItemNumber            = $List.IndexOf($Group[$Item])
                     $ItemNumberWithPadding = ([string]$ItemNumber).PadLeft($MaxNumLen , " ")
@@ -2802,7 +2904,7 @@ function Get-ListByGroups {
             $Color = "Cyan"
         }
 
-        Write-Host "$Item"-ForegroundColor $Color
+        Write-Host -Object $Item -ForegroundColor $Color
     }
     #Write-Host "".PadRight($StringLen, $PadSymbol) -ForegroundColor Cyan
     Write-Host ""
@@ -2814,7 +2916,7 @@ function Get-ListByGroups {
     }
     $SelectedList = Read-Host
     while ( -not ($SelectedList -match '[0-9\-*,\s]') ) {
-        Write-Host "Wrong input [$SelectedList]! Allow only digit [0-9], interval [-], space [ ], separator [,], all elements [*]." -ForegroundColor Red -NoNewline
+        Write-Host "Wrong input [$SelectedList]! Allow only [0-9],[-],[ ],[,],[*]. Please input again: " -ForegroundColor Red -NoNewline
         $SelectedList = Read-Host
     }
 
@@ -2834,8 +2936,16 @@ function Get-ListByGroups {
         return $Result
     }
 
+    $HasChild = $SelectedList | where-object { $_.Contains("  ") -eq $true }
+    if ( (0 -notin $SelectedArray) -and $HasChild ){
+        $Global:modGroupListArray += $SelectedList[0].trim()
+    }
+    ElseIf (0 -in $SelectedArray ) {
+        $Global:modGroupListArray = $Global:modGroupListArray | select-object -skiplast 1
+    }
+
     if ( $PassThru ) {
-        return $SelectedList
+        return $SelectedList.trim()
     }
 }
 Function Get-EventList {
@@ -3546,9 +3656,9 @@ function Show-ColoredTable {
         Show table in color view.
     .EXAMPLE
         Parameter set: "Alerts"
-        Show-ColoredTable -Field $Field [-Data $Data] [-Definition $Definition] [-View $View] [-Title $Title] [-SelectField $SelectField] [-SelectMessage $SelectMessage] [-NotNull $NotNull]
+        Show-ColoredTable -Field $Field [-Data $Data] [-Definition $Definition] [-View $View] [-Title $Title] [-SelectField $SelectField] [-SelectMessage $SelectMessage] [-Confirmation $Confirmation] [-NotNull $NotNull] [-Single $Single]
         Parameter set: "Color"
-        Show-ColoredTable [-Data $Data] [-View $View] [-Color $Color] [-Title $Title] [-AddRowNumbers $AddRowNumbers] [-SelectField $SelectField] [-SelectMessage $SelectMessage] [-NotNull $NotNull] [-AddNewLine $AddNewLine] [-PassThru $PassThru]
+        Show-ColoredTable [-Data $Data] [-View $View] [-Color $Color=@("Cyan", "DarkMagenta", "Magenta")] [-Title $Title] [-AddRowNumbers $AddRowNumbers] [-SelectField $SelectField] [-SelectMessage $SelectMessage] [-Confirmation $Confirmation] [-NotNull $NotNull] [-Single $Single] [-AddNewLine $AddNewLine] [-PassThru $PassThru]
     .NOTES
         AUTHOR  Alexk
         CREATED 02.12.20
@@ -3566,7 +3676,7 @@ function Show-ColoredTable {
         [Parameter( Mandatory = $false, Position = 3, HelpMessage = "Selected fields view." )]
         $View,
         [Parameter( Mandatory = $false, Position = 4, HelpMessage = "Change each line color.", ParameterSetName = "Color")]
-        [String[]] $Color,
+        [String[]] $Color = @("Cyan", "DarkMagenta", "Magenta"),
         [Parameter( Mandatory = $false, Position = 5, HelpMessage = "Table title.")]
         [String] $Title,
         [Parameter( Mandatory = $false, Position = 6, HelpMessage = "Add row numbers.", ParameterSetName = "Color" )]
@@ -3575,13 +3685,15 @@ function Show-ColoredTable {
         [string] $SelectField,
         [Parameter( Mandatory = $false, Position = 8, HelpMessage = "Select message.")]
         [string] $SelectMessage,
-        [Parameter( Mandatory = $false, Position = 8, HelpMessage = "Allow only not null results.")]
+        [Parameter( Mandatory = $false, Position = 9, HelpMessage = "Select message.")]
+        [string] $Confirmation,
+        [Parameter( Mandatory = $false, Position = 10, HelpMessage = "Allow only not null results.")]
         [switch] $NotNull,
-        [Parameter( Mandatory = $false, Position = 9, HelpMessage = "Allow only single result.")]
+        [Parameter( Mandatory = $false, Position = 11, HelpMessage = "Allow only single result.")]
         [switch] $Single,
-        [Parameter( Mandatory = $false, Position = 10, HelpMessage = "Add new line at the end.", ParameterSetName = "Color" )]
+        [Parameter( Mandatory = $false, Position = 12, HelpMessage = "Add new line at the end.", ParameterSetName = "Color" )]
         [switch] $AddNewLine,
-        [Parameter( Mandatory = $false, Position = 11, HelpMessage = "Return object.", ParameterSetName = "Color" )]
+        [Parameter( Mandatory = $false, Position = 13, HelpMessage = "Return object.", ParameterSetName = "Color" )]
         [switch] $PassThru
     )
 
@@ -3662,7 +3774,8 @@ function Show-ColoredTable {
                 $NewView += $View
             }
             Else {
-                $NewView = "*"
+                $Fields   = ($Data | get-member -MemberType NoteProperty).name | where-object {$_.name -ne "Num"}
+                $NewView += $Fields
             }
             $Data = $Result
             $View = $NewView
@@ -3739,18 +3852,30 @@ function Show-ColoredTable {
             }
 
             if ( $data ) {
+                $First = $true
                 $SelectedNum    = Convert-StringToDigitArray -UserInput $Selected -DataSize $Data.count
-                $SelectedFields = ($Data | Where-Object { ($Data.IndexOf($_) + 1) -in $SelectedNum }).$SelectField
-                $SelectedArray  = $Data | Where-Object { $_.$SelectField -in $SelectedFields }
+                #$SelectedFields
+                $SelectedArray = ($Data | Where-Object { ($Data.IndexOf($_) + 1) -in $SelectedNum })#.$SelectField
+                #$SelectedArray  = $Data | Where-Object { $_.$SelectField -in $SelectedFields }
                 Write-Host ""
                 write-host "Selected items: " -ForegroundColor $Color[0]
 
                 $Cnt        = 1
                 $ColorCount = $Color.Count - 1
+                $FirstCnt   = 0
 
                 $TableData  = ( $SelectedArray  | format-table -property $View -AutoSize | Out-String ).trim().split("`r")
                 foreach ( $line in $TableData ){
-                    write-host $line -ForegroundColor $Color[$Cnt] -NoNewLine
+                    if ( $First ) {
+                        write-host $line -ForegroundColor $Color[0] -NoNewLine
+                        $FirstCnt ++
+                        if ( $FirstCnt -gt 1 ){
+                            $First = $false
+                        }
+                    }
+                    Else {
+                        write-host $line -ForegroundColor $Color[$Cnt] -NoNewLine
+                    }
 
                     if ( $Cnt -lt $ColorCount){
                         $Cnt++
@@ -3764,7 +3889,18 @@ function Show-ColoredTable {
                 }
 
                 if ( !$NotNull ){
-                    return $SelectedArray
+                    if ( $Confirmation -and $SelectedArray ){
+                        $Answer = Get-Answer -Title $Confirmation -ChooseFrom "y", "n" -DefaultChoose "y" -AddNewLine
+                        if ( $Answer -eq "Y" ){
+                            return $SelectedArray
+                        }
+                        Else {
+                            return $null
+                        }
+                    }
+                    Else {
+                        return $SelectedArray
+                    }
                 }
                 else {
                     if ( $null -eq $SelectedArray ){
@@ -3774,7 +3910,18 @@ function Show-ColoredTable {
             }
         }
 
-        return $SelectedArray
+        if ( $Confirmation -and $SelectedArray ){
+            $Answer = Get-Answer -Title $Confirmation -ChooseFrom "y", "n" -DefaultChoose "y" -AddNewLine
+            if ( $Answer -eq "Y" ){
+                return $SelectedArray
+            }
+            Else {
+                return $null
+            }
+        }
+        Else {
+            return $SelectedArray
+        }
     }
     Else {
         if ( $AddNewLine ){
@@ -3792,7 +3939,7 @@ Function Get-Answer {
     .DESCRIPTION
         Colored read host with features.
     .EXAMPLE
-        Get-Answer -Title $Title [-ChooseFrom $ChooseFrom] [-DefaultChoose $DefaultChoose] [-Color $Color] [-AllowType $AllowType] [-Format $Format] [-Example $Example] [-AddNewLine $AddNewLine] [-AsSecureString $AsSecureString] [-MaskInput $MaskInput] [-NotNull $NotNull] [-HideInput $HideInput]
+        Get-Answer -Title $Title [-ChooseFrom $ChooseFrom] [-DefaultChoose $DefaultChoose] [-Color $Color=@("Cyan", "DarkMagenta", "Magenta")] [-AllowType $AllowType] [-Format $Format] [-Example $Example] [-AddNewLine $AddNewLine] [-AsSecureString $AsSecureString] [-MaskInput $MaskInput] [-NotNull $NotNull] [-HideInput $HideInput]
     .NOTES
         AUTHOR  Alexk
         CREATED 26.12.20
@@ -4146,6 +4293,247 @@ Function Get-Answer {
     return $Res
 
 }
+
+Function Add-ToDataFile {
+<#
+    .SYNOPSIS
+        Add to data file
+    .DESCRIPTION
+        Function add or replace data array to csv, xml, json data file.
+    .EXAMPLE
+        Add-ToDataFile -Data $Data -FilePath $FilePath [-Replace $Replace] [-Remove $Remove] [-PassThru $PassThru]
+    .NOTES
+        AUTHOR  Alexk
+        CREATED 02.02.21
+        VER     1
+#>
+    [CmdletBinding()]
+    Param(
+        [Parameter( Mandatory = $True, Position = 0, HelpMessage = "Data array." )]
+        [ValidateNotNullOrEmpty()]
+        [PSObject[]] $Data,
+        [Parameter( Mandatory = $true, Position = 1, HelpMessage = "File path." )]
+        [ValidateNotNullOrEmpty()]
+        [string] $FilePath,
+        [Parameter( Mandatory = $false, Position = 2, HelpMessage = "Replace data in file." )]
+        [switch] $Replace,
+        [Parameter( Mandatory = $false, Position = 3, HelpMessage = "Replace data in file." )]
+        [switch] $Remove,
+        [Parameter( Mandatory = $false, Position = 4, HelpMessage = "Return object." )]
+        [switch] $PassThru
+    )
+    begin {
+        $res         = $true
+        $Array       = @()
+        $FileMembers = $null
+
+        $FileExtention = split-path -path $FilePath -Extension
+
+        if ( ( test-path -path $FilePath ) -and ( -not $Replace ) ){
+            $FileData = @()
+            switch ( $FileExtention ) {
+                ".XML" {
+                    $FileData += import-cliXML -path $FilePath
+                }
+                ".CSV" {
+                    $FileData += import-csv -path $FilePath
+                    $DateFields = @()
+                    $BoolFields = @()
+                    $IntFields  = @()
+                    foreach ( $item in ($FileData | get-member -MemberType NoteProperty).name  ){
+                        try {
+                            $Date        =  [System.DateTime](get-date $FileData[0].$item)
+                            $DateFields += $item
+                        }
+                        Catch {}
+                        try {
+                            $Bool        =  [System.Convert]::ToBoolean( $FileData[0].$item )
+                            $BoolFields += $item
+                        }
+                        Catch {}
+                    }
+                    foreach ( $item in $FileData ) {
+                        foreach ( $Date in $DateFields ){
+                            try {
+                                $item.$Date = [System.DateTime]( get-date $item.$Date )
+                            }
+                            Catch {}
+                        }
+                        foreach ( $Bool in $BoolFields ){
+                            try {
+                                $item.$Bool = [System.Convert]::ToBoolean( $item.$Bool )
+                            }
+                            Catch {}
+                        }
+                    }
+                }
+                ".JSON" {
+                    $FileData += get-content -path $FilePath
+                    $FileData  = $FileData | ConvertFrom-JSON
+
+                    $DateFields = $FileData.PSobject.members | where-object { $_.TypeNameOfValue -eq "System.Management.Automation.PSCustomObject"}
+                    foreach ( $Date in $DateFields ){
+                        if ( $Date.DateTime ) {
+                            $Date.value = [System.DateTime](get-date $Date.Value.Value)
+                        }
+                    }
+                }
+                Default {}
+            }
+            $FileMembers = ($FileData | get-member -MemberType NoteProperty | where-object { $_.name -ne "Value"}).name | Select-Object -Unique
+        }
+        Else {
+            $FileData  = $null
+        }
+
+        if ( $FileMembers ) {
+            $DataMembers =  ($Data |  get-member -MemberType NoteProperty | where-object { $_.name -ne "Value"}).name | Select-Object -Unique
+            $Compare = Compare-Object -ReferenceObject $DataMembers -DifferenceObject $Filemembers -Property $DataMembers.name
+            if ( $Compare ){
+                Add-ToLog -Message "There is a difference between data properties and file properties! `n $Compare" -logFilePath $Global:gsScriptLogFilePath -Display -Status "Error"
+                if ( $PassThru ){
+                    $res =  $false
+                }
+            }
+        }
+    }
+    process {
+        if ( -not $compare ){
+            if ( $FileData ){
+                $Array += $FileData
+            }
+
+            if ( $Remove ) {
+                $Array1 = @()
+                if ( $FileData ) {
+                    foreach ( $item in $Array ) {
+                        foreach ( $item1 in $Data ) {
+                            if ( Compare-Object -ReferenceObject $Item1 -DifferenceObject $Item -Property $DataMembers.name  ){
+                                #Compare-Object -ReferenceObject $Item1 -DifferenceObject $Item -Property $DataMembers.name
+                                $Array1 += $item
+                            }
+                        }
+                    }
+                }
+                $Array = $Array1
+            }
+            Else {
+                $Array += $Data
+            }
+
+            switch ( $FileExtention ) {
+                ".XML" {
+                    $Array | Export-CliXML -path $FilePath -force
+                }
+                ".CSV" {
+                    $Array | export-csv -path $FilePath -force
+                }
+                ".JSON" {
+                    $Array | ConvertTo-Json | Set-Content -path $FilePath -force
+                }
+                Default {}
+            }
+        }
+    }
+    end {
+        if ( $PassThru ){
+            return $Res
+        }
+    }
+}
+
+Function Get-FromDataFile {
+<#
+    .SYNOPSIS
+        Get from data file
+    .DESCRIPTION
+        Function to get data array from csv, xml, json data file.
+    .EXAMPLE
+        Get-FromDataFile -FilePath $FilePath
+    .NOTES
+        AUTHOR  Alexk
+        CREATED 02.02.21
+        VER     1
+#>
+    [CmdletBinding()]
+    Param(
+        [Parameter( Mandatory = $true, Position = 0, HelpMessage = "File path." )]
+        [ValidateNotNullOrEmpty()]
+        [string] $FilePath
+    )
+    begin {
+        $Array       = @()
+        $FileExtention = split-path -path $FilePath -Extension
+        $FileExist = test-path -path $FilePath
+        if ( -not ( $FileExist )){
+            Add-ToLog -Message "File [$FilePath] doesn't exist!" -logFilePath $Global:gsScriptLogFilePath -Display -Status "Warning"
+        }
+    }
+    process {
+        if ( $FileExist ) {
+            $FileData = @()
+            switch ( $FileExtention ) {
+                ".XML" {
+                    $FileData += import-cliXML -path $FilePath
+                }
+                ".CSV" {
+                    $FileData += import-csv -path $FilePath
+                    $DateFields = @()
+                    $BoolFields = @()
+                    $IntFields  = @()
+                    foreach ( $item in ($FileData | get-member -MemberType NoteProperty).name  ){
+                        try {
+                            $Date        =  [System.DateTime](get-date $FileData[0].$item)
+                            $DateFields += $item
+                        }
+                        Catch {}
+                        try {
+                            $Bool        =  [System.Convert]::ToBoolean( $FileData[0].$item )
+                            $BoolFields += $item
+                        }
+                        Catch {}
+                    }
+                    foreach ( $item in $FileData ) {
+                        foreach ( $Date in $DateFields ){
+                            try {
+                                $item.$Date = [System.DateTime]( get-date $item.$Date )
+                            }
+                            Catch {}
+                        }
+                        foreach ( $Bool in $BoolFields ){
+                            try {
+                                $item.$Bool = [System.Convert]::ToBoolean( $item.$Bool )
+                            }
+                            Catch {}
+                        }
+                    }
+                }
+                ".JSON" {
+                    $FileData += get-content -path $FilePath
+                    $FileData  = $FileData | ConvertFrom-JSON
+
+                    $DateFields = $FileData.PSobject.members | where-object { $_.TypeNameOfValue -eq "System.Management.Automation.PSCustomObject"}
+                    foreach ( $Date in $DateFields ){
+                        if ( $Date.DateTime ) {
+                            $Date.value = [System.DateTime](get-date $Date.Value.Value)
+                        }
+                    }
+                }
+                Default {}
+            }
+            $FileMembers = $FileData | get-member -MemberType NoteProperty | where-object { $_.name -ne "Value"}
+
+            return $FileData
+        }
+        Else {
+            return $null
+        }
+    }
+}
+
+
+
+
 #endregion
 #region Dialog
 Function Show-OpenDialog{
@@ -4367,6 +4755,8 @@ function Get-ErrorReporting {
     Write-Host "    $PreviousCommandReplacedArgs" -ForegroundColor Yellow
     Write-Host "====================================================================================================================================================" -ForegroundColor Red
 }
+
+
 #endregion
 
 <#
@@ -4427,7 +4817,8 @@ function Get-ErrorReporting {
 # }
 #>
 
-Export-ModuleMember -Function Get-NewAESKey, Get-VarFromAESFile, Set-VarToAESFile, Disconnect-VPN, Connect-VPN, Add-ToLog, Restart-Switches, Restart-SwitchInInterval, Get-EventList, Send-Email, Start-PSScript, Restart-LocalHostInInterval, Show-Notification, Restart-ServiceInInterval, New-TelegramMessage, Get-SettingsFromFile, Get-HTMLTable, Get-HTMLCol, Get-ContentFromHTMLTemplate, Get-ErrorReporting, Get-CopyByBITS, Show-OpenDialog, Import-ModuleRemotely, Invoke-PSScriptBlock, Get-ACLArray, Set-PSModuleManifest, Get-VarToString, Get-UniqueArrayMembers, Resolve-IPtoFQDNinArray, Get-HelpersData, Get-DifferenceBetweenArrays, Test-Credentials, Convert-FSPath, Start-Program, Test-ElevatedRights, Invoke-CommandWithDebug, Format-TimeSpan, Start-ParallelPortPing, Join-Array, Set-State, Send-Alert, Start-Module, Convert-SpecialCharacters, Get-ListByGroups, Convert-StringToDigitArray, Convert-PSCustomObjectToHashTable, Invoke-TrailerIncrease, Split-words, Remove-Modules, Get-TextLengthPreview, Export-RegistryToFile, Show-ColoredTable, Get-Answer,  Get-AESData
+
+Export-ModuleMember -Function Get-NewAESKey, Get-VarFromAESFile, Set-VarToAESFile, Disconnect-VPN, Connect-VPN, Add-ToLog, Restart-Switches, Restart-SwitchInInterval, Get-EventList, Send-Email, Start-PSScript, Restart-LocalHostInInterval, Show-Notification, Restart-ServiceInInterval, New-TelegramMessage, Get-SettingsFromFile, Get-HTMLTable, Get-HTMLCol, Get-ContentFromHTMLTemplate, Get-ErrorReporting, Get-CopyByBITS, Show-OpenDialog, Import-ModuleRemotely, Invoke-PSScriptBlock, Get-ACLArray, Set-PSModuleManifest, Get-VarToString, Get-UniqueArrayMembers, Resolve-IPtoFQDNinArray, Get-HelpersData, Get-DifferenceBetweenArrays, Test-Credentials, Convert-FSPath, Start-Program, Test-ElevatedRights, Invoke-CommandWithDebug, Format-TimeSpan, Start-ParallelPortPing, Join-Array, Set-State, Send-Alert, Start-Module, Convert-SpecialCharacters, Get-ListByGroups, Convert-StringToDigitArray, Convert-PSCustomObjectToHashTable, Invoke-TrailerIncrease, Split-words, Remove-Modules, Get-TextLengthPreview, Export-RegistryToFile, Show-ColoredTable, Get-Answer,  Get-AESData, Add-ToDataFile, Get-FromDataFile, Compare-Arrays
 
 <#
 
