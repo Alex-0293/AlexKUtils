@@ -1535,9 +1535,18 @@ Function Get-DifferenceBetweenArrays {
     [int]   $SecondArrayCount = $SecondArray.Count
     if ($FirstArrayCount) {
         foreach ($note in $NoteProperties1) {
+            $Cnt      = 0
+            $NoteType = $Null
+            do {
+                if ( $FirstArray[$Cnt].$note ) {
+                    $NoteType = $FirstArray[$cnt].$note.GetType()
+                }
+                $Cnt ++
+            } until ( $NoteType -or $Cnt -gt $FirstArrayCount )
+
             $PSO = [PSCustomObject]@{
                 Name = $note
-                Type = $FirstArray[0].$note.GetType()
+                Type = $NoteType
             }
             $NoteProperties1WithType += $PSO
             $NoteProperties1WithTypeText += "$note($($PSO.type)),"
@@ -1545,9 +1554,18 @@ Function Get-DifferenceBetweenArrays {
     }
     if ($SecondArrayCount) {
         foreach ($note in $NoteProperties2) {
+            $Cnt      = 0
+            $NoteType = $Null
+            do {
+                if ( $SecondArray[$Cnt].$note ) {
+                    $NoteType = $SecondArray[$Cnt].$note.GetType()
+                }
+                $Cnt ++
+            } until ( $NoteType -or $Cnt -gt $SecondArrayCount)
+
             $PSO = [PSCustomObject]@{
                 Name = $note
-                Type = $SecondArray[0].$note.GetType()
+                Type = $NoteType
             }
             $NoteProperties2WithType += $PSO
             $NoteProperties2WithTypeText += "$note($($PSO.type)),"
@@ -1557,7 +1575,8 @@ Function Get-DifferenceBetweenArrays {
     $NoteProperties1WithTypeText = $NoteProperties1WithTypeText.Remove($NoteProperties1WithTypeText.ToCharArray().count - 1)
     $NoteProperties2WithTypeText = $NoteProperties2WithTypeText.Remove($NoteProperties2WithTypeText.ToCharArray().count - 1)
 
-    if ($NoteProperties1WithTypeText -eq $NoteProperties2WithTypeText) {
+    $Compare = Compare-Object -ReferenceObject $NoteProperties2WithType -DifferenceObject $NoteProperties1WithType -Property "name"
+    if ( !$Compare ) {
         foreach ($Item in $SecondArray ) {
             $NotExist = $True
             foreach ($Item1 in $FirstArray) {
@@ -1712,6 +1731,242 @@ Function Compare-Arrays {
     }
     end {
 
+    }
+}
+
+Function Get-MembersType {
+<#
+    .SYNOPSIS
+        Get members type
+    .DESCRIPTION
+        Return object with noteproperty names and types.
+    .EXAMPLE
+        Get-MembersType -PSO $PSO
+    .NOTES
+        AUTHOR  Alexk
+        CREATED 09.03.21
+        VER     1
+#>
+    [OutputType([PSObject[]])]
+    [CmdletBinding()]
+    Param(
+        [Parameter( Mandatory = $true, Position = 0, HelpMessage = "PS object." )]
+        [PSObject] $PSO
+    )
+    begin {
+        $Res = @()
+    }
+    process {
+        $NoteProperties = $PSO | Get-Member -MemberType NoteProperty
+
+        foreach ( $item  in $NoteProperties ){
+            $ItemType = ( $item.definition -split " " )[0]
+            $NewPSO = [PSCustomObject]@{
+                Name = $item.Name
+                Type = $ItemType
+            }
+
+            $Res += $NewPSO
+        }
+    }
+    end {
+        return $Res
+    }
+}
+
+Function Compare-ArraysVisual {
+<#
+    .SYNOPSIS
+        Compare arrays visual
+    .DESCRIPTION
+        Function to get complex array for visual compare.
+    .EXAMPLE
+        Compare-ArraysVisual -ReferenceObject $ReferenceObject -DifferenceObject $DifferenceObject -KeyField $KeyField [-ExcludeMembers $ExcludeMembers] [-MandatoryMembers $MandatoryMembers] [-IncludeUnchanged $IncludeUnchanged] [-SuppressOutput $SuppressOutput]
+    .NOTES
+        AUTHOR  Alexk
+        CREATED 09.03.21
+        VER     1
+#>
+    [OutputType([PSObject])]
+    [CmdletBinding()]
+    Param(
+        [Parameter( Mandatory = $true, Position = 0, HelpMessage = "Array." )]
+        [PSObject[]] $ReferenceObject,
+        [Parameter( Mandatory = $true, Position = 1, HelpMessage = "Array." )]
+        [PSObject[]] $DifferenceObject,
+        [Parameter( Mandatory = $true, Position = 2, HelpMessage = "Key field for binding." )]
+        [string] $KeyField,
+        [Parameter( Mandatory = $false, Position = 3, HelpMessage = "Members to not compare." )]
+        [string[]] $ExcludeMembers,
+        [Parameter( Mandatory = $false, Position = 4, HelpMessage = "Members to add to changes." )]
+        [string[]] $MandatoryMembers,
+        [Parameter( Mandatory = $false, Position = 5, HelpMessage = "Include unchanged member." )]
+        [switch] $IncludeUnchanged,
+        [Parameter( Mandatory = $false, Position = 6, HelpMessage = "Suppress output." )]
+        [switch] $SuppressOutput
+    )
+    begin {
+        $ReferenceObjectMembers  = Get-MembersType -PSO $ReferenceObject
+        $DifferenceObjectMembers = Get-MembersType -PSO $DifferenceObject
+
+        $Compare = Compare-Object -ReferenceObject $ReferenceObjectMembers -DifferenceObject $DifferenceObjectMembers -Property "Name", "Type"
+
+        if ( $Compare ){
+            $Compare = Compare-Object -ReferenceObject $ReferenceObjectMembers -DifferenceObject $DifferenceObjectMembers -IncludeEqual -Property "Name", "Type"
+
+            Add-ToLog -Message "Objects are not equal!" -logFilePath $Global:gsScriptLogFilePath -Display -category "Compare-ArraysVisual" -Status "error"
+
+            Show-ColoredTable -Data $Compare -Title "Objects compare" -AddRowNumbers -AddNewLine
+        }
+
+        if ( $KeyField -notin $ReferenceObjectMembers.Name ) {
+            Add-ToLog -Message "Objects does not contain member [$KeyField]!" -logFilePath $Global:gsScriptLogFilePath -Display -category "Compare-ArraysVisual" -Status "error"
+        }
+
+        $MembersArray = ($ReferenceObjectMembers | Where-Object { $_.name -notin $ExcludeMembers }).name
+        $MembersArrayWithMandatory = $MandatoryMembers + $MembersArray  | Select-Object -Unique
+        $PSO = [PSCustomObject]@{
+            Changed    = $null
+            Removed    = $null
+            Added      = $null
+        }
+
+        if ( $IncludeUnchanged ) {
+            $PSO | Add-Member -NotePropertyValue "Unchanged" -NotePropertyValue $null
+            $Unchanged   = @()
+        }
+
+        $Changed = @()
+        $Removed = @()
+        $Added   = @()
+    }
+    process {
+        Function Get-Difference {
+        <#
+            .SYNOPSIS
+                Get difference
+            .DESCRIPTION
+                Return difference between two PSO.
+            .EXAMPLE
+                Get-Difference -Reference $Reference -Difference $Difference -members $members -KeyField $KeyField [-MandatoryMembers $MandatoryMembers]
+            .NOTES
+                AUTHOR  Alexk
+                CREATED 09.03.21
+                VER     1
+        #>
+            [OutputType([string])]
+            [CmdletBinding()]
+            Param(
+                [Parameter( Mandatory = $true, Position = 0, HelpMessage = "Reference PSO." )]
+                [PSObject] $Reference,
+                [Parameter( Mandatory = $true, Position = 1, HelpMessage = "Difference PSO." )]
+                [PSObject] $Difference,
+                [Parameter( Mandatory = $true, Position = 2, HelpMessage = "Members names." )]
+                [PSObject] $members,
+                [Parameter( Mandatory = $true, Position = 3, HelpMessage = "Key field." )]
+                [string] $KeyField,
+                [Parameter( Mandatory = $false, Position = 4, HelpMessage = "Members to add to changes." )]
+                [string[]] $MandatoryMembers
+            )
+            begin {
+                $Changes = @()
+
+                $PSORef  = [PSCustomObject]@{ $KeyField = $Reference.$KeyField }
+                $PSODiff = [PSCustomObject]@{ $KeyField = $Difference.$KeyField }
+                foreach ( $item in $MandatoryMembers ){
+                    $PSORef  | Add-Member -NotePropertyName $item -NotePropertyValue $null
+                    $PSODiff | Add-Member -NotePropertyName $item -NotePropertyValue $null
+                }
+            }
+            process {
+                foreach ( $item in $members ) {
+                    if ( $item -in $MandatoryMembers ){
+                        $PSORef.$item  = $Reference.$item
+                        $PSODiff.$item = $difference.$item
+                    }
+                    Else {
+                        if ( !( $null -eq $Reference.$item )){
+                            $compare = Compare-Object -ReferenceObject $Reference.$item -DifferenceObject $difference.$item -CaseSensitive
+
+                            if ( $compare ){
+                                $PSORef  | Add-Member -NotePropertyName $item -NotePropertyValue $Reference.$item
+                                $PSODiff | Add-Member -NotePropertyName $item -NotePropertyValue $difference.$item
+                            }
+                        }
+                        else {
+                            if ( $Reference.$item -ne $difference.$item ) {
+                                $PSORef  | Add-Member -NotePropertyName $item -NotePropertyValue $Reference.$item
+                                $PSODiff | Add-Member -NotePropertyName $item -NotePropertyValue $difference.$item
+                            }
+                        }
+                    }
+                }
+
+                if ( $PSORef ) {
+                    $Changes += $PSORef
+                    $Changes += $PSODiff
+                }
+            }
+            end {
+                return $Changes
+            }
+        }
+        if ( !$Compare ){
+            $Compare = Compare-Object -ReferenceObject $ReferenceObject -DifferenceObject $DifferenceObject -CaseSensitive -Property $MembersArray | Where-Object { $_.SideIndicator -eq "<="}
+
+            foreach ( $Item in $Compare ) {
+                $Key = $Item.$KeyField
+
+                $Diff =  $DifferenceObject | where-object { $_.$KeyField -eq $Key }
+                $Ref  =  $ReferenceObject  | where-object { $_.$KeyField -eq $Key }
+
+                if ( $Ref -and $Diff ) {
+                    $Changed += get-difference -reference $Ref -difference $Diff -members $MembersArrayWithMandatory -KeyField $KeyField -MandatoryMembers $MandatoryMembers
+                }
+            }
+
+            if ( $IncludeUnchanged ) {
+                $Unchanged += $ReferenceObject | Where-Object { $_.$KeyField -NotIn $Changed.$KeyField }
+            }
+
+            $RemovedItems = $ReferenceObject | Where-Object { $_.$KeyField -NotIn $DifferenceObject.$KeyField }
+            if ( $RemovedItems ) {
+                $Removed = $RemovedItems
+            }
+
+            $AddedItems = $DifferenceObject | Where-Object { $_.$KeyField -NotIn $ReferenceObject.$KeyField }
+            if ( $AddedItems ) {
+                $Added = $AddedItems
+            }
+
+            $PSO.Changed = $Changed
+            $PSO.Removed = $Removed
+            $PSO.Added   = $Added
+            if ( $IncludeUnchanged ) {
+                $PSO.Unchanged = $Unchanged
+            }
+        }
+
+        $View  = @()
+        $View += $KeyField
+        $View += $MandatoryMembers
+        $View += ($Changed | get-member -MemberType NoteProperty).name | Where-Object { $_ -notin $View }
+
+        if ( $Changed ) {
+            Show-ColoredTable -Data $Changed -View $View -Title "Changed items" -AddRowNumbers -AddNewLine
+        }
+        if ( $Removed ) {
+            Show-ColoredTable -Data $Removed -View $View -Title "Removed items" -AddRowNumbers -AddNewLine
+        }
+        if ( $Added ) {
+            Show-ColoredTable -Data $Added -View $View -Title "Added items" -AddRowNumbers -AddNewLine
+        }
+        if ( $Unchanged ) {
+            Show-ColoredTable -Data $Unchanged -View $View -Title "Unchanged items" -AddRowNumbers -AddNewLine
+        }
+    }
+    end {
+        return $PSO
     }
 }
 
@@ -2931,7 +3186,7 @@ function Get-ListByGroups {
                 }
                 Else {
                     if ( $Item -eq 0){
-                        $GroupItem  = $Group[0]
+                        $GroupItem  = ([string[]]$Group)[0]
                     }
                     Else {
                         $GroupItem  = $Null
@@ -3834,8 +4089,11 @@ function Show-ColoredTable {
     )
 
     if ( $Data ){
+        $SerialData = [System.Management.Automation.PSSerializer]::Serialize($Data)
+        $DataCopy   = [System.Management.Automation.PSSerializer]::Deserialize($SerialData)
+
         $Header = "[$( get-date -format $Global:gsGlobalTimeFormat )][$Global:modDialogNumber][$($global:modComputer)][$Title] |"
-        $Header = $Header.PadRight($Host.UI.RawUI.WindowSize.Width - $header.Length - 4,"-") + "-> |"
+        $Header = $Header.PadRight(200,"-") + "-> |"
         Get-ColorText -Text $Header -TextColor "Magenta"
         $Global:modDialogNumber ++
 
@@ -3864,7 +4122,7 @@ function Show-ColoredTable {
                 }
             }
 
-            foreach ( $Item in $Data ){
+            foreach ( $Item in $DataCopy ){
                 switch ( $Item.$Field ) {
                     $Definition.Information.Field {
                         if ( $First ) {
@@ -3912,23 +4170,47 @@ function Show-ColoredTable {
         }
         Else {
             if ( $AddRowNumbers ){
-                $Counter = 1
+                [Int16] $Counter = 1
                 $Result = @()
-                foreach ( $item in $Data ) {
-                    $item | Add-Member -MemberType NoteProperty -Name "Num" -Value $Counter -ErrorAction SilentlyContinue
+                $HasNum = ( $DataCopy | get-member -MemberType NoteProperty ).name | where-object {$_ -eq "Num"}
+
+                if ( !$HasNum ) {
+                    try {
+                        $DataCopy | Add-Member -MemberType NoteProperty -Name "Num" -Value 0
+                    }
+                    Catch {
+                        ( $DataCopy | get-member -MemberType NoteProperty ).name
+                        $stop
+                    }
+                }
+
+                foreach ( $item in $DataCopy ) {
+                    try {
+                        $item.Num = $Counter
+                    }
+                    Catch {
+                        ( $item | get-member -MemberType NoteProperty ).name
+                        $stop
+                    }
                     $Result  += $item
                     $Counter ++
                 }
+
                 $NewView  = @("Num")
                 if ( $View -ne "*" ){
                     $NewView += $View
                 }
                 Else {
-                    $Fields   = ($Data | get-member -MemberType NoteProperty).name | where-object {$_ -ne "Num"}
+                    $Fields   = ($DataCopy | get-member -MemberType NoteProperty).name | where-object {$_ -ne "Num"}
                     $NewView += $Fields
                 }
-                $Data = $Result
+
                 $View = $NewView
+                $Data.PSObject.Properties.Remove("Num")
+            }
+
+            if ( !$Result ) {
+                $Result = $DataCopy
             }
 
             if ( !$Color ){
@@ -3951,7 +4233,7 @@ function Show-ColoredTable {
             $FirstCnt   = 0
             $ColorCount = $Color.Count - 1
 
-            $TableData  = ( $Data  | format-table -property $View -AutoSize | Out-String ).trim().split("`r")
+            $TableData  = ( $Result | format-table -property $View -AutoSize | Out-String ).trim().split("`r")
             foreach ( $line in $TableData ){
                 if ( $First ) {
                     write-host $line -ForegroundColor $Color[0] -NoNewLine
@@ -3976,12 +4258,12 @@ function Show-ColoredTable {
         }
 
         if ( $SelectMessage ){
-            while ( (!$SelectedArray) -and $data  ) {
+            while ( (!$SelectedArray) -and $Result ) {
                 Write-Host "`n$SelectMessage" -NoNewline -ForegroundColor $Color[0]
                 $Selected = $null
-                while( !$Selected -and $data ){
+                while( !$Selected -and $Result ){
                     $Selected       = Read-Host
-                    if ( !$Selected -and $data ){
+                    if ( !$Selected -and $Result ){
                         write-host "Select correct number! 0 to exit." -ForegroundColor red
                         Write-Host "`n$SelectMessage" -NoNewline -ForegroundColor $Color[0]
                     }
@@ -3996,9 +4278,9 @@ function Show-ColoredTable {
                     }
                 }
 
-                if ( $data ) {
+                if ( $Result ) {
                     $First = $true
-                    $SelectedNum    = Convert-StringToDigitArray -UserInput $Selected -DataSize $Data.count
+                    $SelectedNum    = Convert-StringToDigitArray -UserInput $Selected -DataSize $Result.count
 
                     if ( "e" -in $SelectedNum ){
                         Get-ColorText -TextColor "Green" -Text "[Exit]"
@@ -4007,7 +4289,7 @@ function Show-ColoredTable {
                     }
                     if ( !( "b" -in $SelectedNum ) ) {
 
-                        $SelectedArray = ($Data | Where-Object { ($Data.IndexOf($_) + 1) -in $SelectedNum })
+                        $SelectedArray = ( $Result | Where-Object { ( $Result.IndexOf($_) + 1) -in $SelectedNum })
 
                         $Cnt        = 1
                         $ColorCount = $Color.Count - 1
@@ -4045,14 +4327,14 @@ function Show-ColoredTable {
                             if ( $Confirmation -and $SelectedArray ){
                                 $Answer = Get-Answer -Title $Confirmation -ChooseFrom "y", "n" -DefaultChoose "y" -AddNewLine
                                 if ( $Answer -eq "Y" ){
-                                    return $SelectedArray
+                                    return $SelectedArray | select-object -ExcludeProperty "num"
                                 }
                                 Else {
                                     return $null
                                 }
                             }
                             Else {
-                                return $SelectedArray
+                                return $SelectedArray | select-object -ExcludeProperty "num"
                             }
                         }
                         else {
@@ -4060,6 +4342,9 @@ function Show-ColoredTable {
                                 write-host "Choose correct option!" -ForegroundColor red
                             }
                         }
+                    }
+                    Else {
+                        return "Back"
                     }
                 }
             }
@@ -4070,7 +4355,7 @@ function Show-ColoredTable {
                     Write-host ""
                 }
                 if ( $Answer -eq "Y" ){
-                    return $SelectedArray
+                    return $SelectedArray | select-object -ExcludeProperty "num"
                 }
                 Else {
                     return $null
@@ -4080,7 +4365,7 @@ function Show-ColoredTable {
                 if ( $AddNewLine ){
                     Write-host ""
                 }
-                return $SelectedArray
+                return $SelectedArray | select-object -ExcludeProperty "num"
             }
         }
         Else {
@@ -4088,7 +4373,7 @@ function Show-ColoredTable {
                 Write-host ""
             }
             if ( $PassThru ){
-                return $Result
+                return $Result | select-object -ExcludeProperty "num"
             }
         }
     }
@@ -4459,7 +4744,6 @@ Function Get-Answer {
     return $Res
 
 }
-
 Function Add-ToDataFile {
 <#
     .SYNOPSIS
@@ -4634,7 +4918,6 @@ Function Add-ToDataFile {
         }
     }
 }
-
 Function Get-FromDataFile {
 <#
     .SYNOPSIS
@@ -4822,21 +5105,29 @@ Function Get-DiskVolumeInfo {
     [CmdletBinding()]
     Param()
     begin {
-        $LogicalDisks = Get-volume
-        $Disks        = Get-disk
-        $VolumeArray  = @()
+        $LogicalDisks    = Get-volume
+        $Disks           = Get-disk
+        $VolumeArray     = @()
         $BitLockerVolume = Get-BitLockerVolume -ErrorAction SilentlyContinue
     }
     process {
         foreach ( $LogicalDisk in $LogicalDisks ){
             if ( $LogicalDisk.DriveLetter ) {
                 $DiskIndex = (Get-CimInstance -Query "Associators of {Win32_LogicalDisk.DeviceID='$($LogicalDisk.DriveLetter):'} WHERE ResultRole=Antecedent" | Select-Object DiskIndex).DiskIndex
+
                 $Disk = $Disks | where-object { $_.number -eq $DiskIndex }
+
+                if ( $Disk.SerialNumber ){
+                    $DiskSerial = $Disk.SerialNumber.trim()
+                }
+                Else {
+                    $DiskSerial = ""
+                }
 
                 $PSO = [PSCustomObject]@{
                     DiskNumber            = [uint32] $DiskIndex
                     DiskModel             = $Disk.Model
-                    DiskSerial            = $Disk.SerialNumber.trim()
+                    DiskSerial            = $DiskSerial
                     DiskHealth            = $Disk.HealthStatus
                     DiskOperationalStatus = $Disk.OperationalStatus
                     DiskTotalSizeGB       = [math]::round($Disk.Size / 1gb,2)
@@ -4852,12 +5143,14 @@ Function Get-DiskVolumeInfo {
                     AllocationUnitSizeKB  = [math]::round($LogicalDisk.AllocationUnitSize / 1kb,2)
                     ProtectionStatus      = ""
                     VolumeStatus          = ""
+                    VolumeType            = ""
                 }
 
                 if ( $BitLockerVolume ) {
                     $BitLocker = $BitLockerVolume | where-object {$_.MountPoint -eq "$($LogicalDisk.DriveLetter):"}
                     $PSO.ProtectionStatus = $BitLocker.ProtectionStatus
                     $PSO.VolumeStatus     = $BitLocker.VolumeStatus
+                    $PSO.VolumeType       = $BitLocker.VolumeType
                 }
 
                 $VolumeArray += $PSO
@@ -4868,9 +5161,104 @@ Function Get-DiskVolumeInfo {
         return $VolumeArray
     }
 }
+Function Remove-ItemToRecycleBin {
+<#
+    .SYNOPSIS
+        Remove item to recycle bin
+    .DESCRIPTION
+        Remove file or directory to recycle bin.
+    .EXAMPLE
+        Remove-ItemToRecycleBin -Path $Path [-PassThru $PassThru]
+    .NOTES
+        AUTHOR  Alexk
+        CREATED 09.03.21
+        VER     1
+#>
+    [CmdletBinding()]
+    Param(
+        [Parameter( Mandatory = $true, Position = 0, HelpMessage = "Path to file or folder." )]
+        [string] $Path,
+        [Parameter( Mandatory = $false, Position = 1, HelpMessage = "Return object." )]
+        [string] $PassThru
+    )
+    begin {
+        $PathExist = test-path -path $Path
+        if ( !$PathExist ){
+            Add-ToLog -Message "Path [$Path] does not exist!" -logFilePath $Global:gsScriptLogFilePath -Display -category "Remove-ItemToRecycleBin" -Status "error"
+        }
+        $Res = $False
+    }
+    process {
+        if ( $PathExist ){
+            Add-ToLog -Message "Sending file [$Path] to recyclebin." -logFilePath $Global:gsScriptLogFilePath -Display -category "Remove-ItemToRecycleBin" -Status "info"
+            $shell = new-object -comobject "Shell.Application"
+            $item = $shell.Namespace(0).ParseName("$Path")
+            $item.InvokeVerb("delete")
 
+            $Res = $true
 
+        }
+    }
+    end {
+        if ( $PassThru ){
+            return $Res
+        }
+    }
+}
 
+Function Get-FileName {
+<#
+    .SYNOPSIS
+        Get file name
+    .DESCRIPTION
+        Generate new file name.
+    .EXAMPLE
+        Get-FileName -Name $Name -Extension $Extension [-Prefix $Prefix] [-Suffix $Suffix] [-UseDateTime $UseDateTime]
+    .NOTES
+        AUTHOR  Alexk
+        CREATED 09.03.21
+        VER     1
+#>
+    [OutputType([string])]
+    [CmdletBinding()]
+    Param(
+        [Parameter( Mandatory = $True, Position = 0, HelpMessage = "Core name." )]
+        [string] $Name,
+        [Parameter( Mandatory = $false, Position = 1, HelpMessage = "Suffix." )]
+        [string] $Prefix,
+        [Parameter( Mandatory = $false, Position = 2, HelpMessage = "Suffix." )]
+        [string] $Suffix,
+        [Parameter( Mandatory = $True, Position = 3, HelpMessage = "Extention." )]
+        [string] $Extension,
+        [Parameter( Mandatory = $False, Position = 4, HelpMessage = "Use date and time in file name." )]
+        [switch] $UseDateTime
+    )
+    begin {
+        $Res = ""
+    }
+    process {
+        if ( $prefix ){
+            $Res = "$prefix-"
+        }
+        if ( $name ){
+            $Res = "$Res$name"
+        }
+        if ( $UseDateTime ) {
+            $Date = ( get-date -format $Global:gsGlobalDateTimeFormat ).replace(".","-").replace(":","-")
+            $Res = "$Res-$Date"
+        }
+        if ( $Suffix ){
+            $Res = "$Res-$Suffix"
+        }
+        if ( $Extension ){
+            $Res = "$Res.$Extension"
+        }
+
+    }
+    end {
+        return $res
+    }
+}
 
 #endregion
 #region Dialog
@@ -5156,7 +5544,7 @@ function Get-ErrorReporting {
 #>
 
 
-Export-ModuleMember -Function Get-NewAESKey, Get-VarFromAESFile, Set-VarToAESFile, Disconnect-VPN, Connect-VPN, Add-ToLog, Restart-Switches, Restart-SwitchInInterval, Get-EventList, Send-Email, Start-PSScript, Restart-LocalHostInInterval, Show-Notification, Restart-ServiceInInterval, New-TelegramMessage, Get-SettingsFromFile, Get-HTMLTable, Get-HTMLCol, Get-ContentFromHTMLTemplate, Get-ErrorReporting, Get-CopyByBITS, Show-OpenDialog, Import-ModuleRemotely, Invoke-PSScriptBlock, Get-ACLArray, Set-PSModuleManifest, Get-VarToString, Get-UniqueArrayMembers, Resolve-IPtoFQDNinArray, Get-HelpersData, Get-DifferenceBetweenArrays, Test-Credentials, Convert-FSPath, Start-Program, Test-ElevatedRights, Invoke-CommandWithDebug, Format-TimeSpan, Start-ParallelPortPing, Join-Array, Set-State, Send-Alert, Start-Module, Convert-SpecialCharacters, Get-ListByGroups, Convert-StringToDigitArray, Convert-PSCustomObjectToHashTable, Invoke-TrailerIncrease, Split-words, Remove-Modules, Get-TextLengthPreview, Export-RegistryToFile, Show-ColoredTable, Get-Answer,  Get-AESData, Add-ToDataFile, Get-FromDataFile, Compare-Arrays, Get-ColorText, Get-DiskVolumeInfo
+Export-ModuleMember -Function Get-NewAESKey, Get-VarFromAESFile, Set-VarToAESFile, Disconnect-VPN, Connect-VPN, Add-ToLog, Restart-Switches, Restart-SwitchInInterval, Get-EventList, Send-Email, Start-PSScript, Restart-LocalHostInInterval, Show-Notification, Restart-ServiceInInterval, New-TelegramMessage, Get-SettingsFromFile, Get-HTMLTable, Get-HTMLCol, Get-ContentFromHTMLTemplate, Get-ErrorReporting, Get-CopyByBITS, Show-OpenDialog, Import-ModuleRemotely, Invoke-PSScriptBlock, Get-ACLArray, Set-PSModuleManifest, Get-VarToString, Get-UniqueArrayMembers, Resolve-IPtoFQDNinArray, Get-HelpersData, Get-DifferenceBetweenArrays, Test-Credentials, Convert-FSPath, Start-Program, Test-ElevatedRights, Invoke-CommandWithDebug, Format-TimeSpan, Start-ParallelPortPing, Join-Array, Set-State, Send-Alert, Start-Module, Convert-SpecialCharacters, Get-ListByGroups, Convert-StringToDigitArray, Convert-PSCustomObjectToHashTable, Invoke-TrailerIncrease, Split-words, Remove-Modules, Get-TextLengthPreview, Export-RegistryToFile, Show-ColoredTable, Get-Answer,  Get-AESData, Add-ToDataFile, Get-FromDataFile, Compare-Arrays, Get-ColorText, Get-DiskVolumeInfo, Remove-ItemToRecycleBin, Get-MembersType, Compare-ArraysVisual, Get-FileName
 
 <#
 
