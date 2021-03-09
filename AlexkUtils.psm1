@@ -1,4 +1,4 @@
-<#
+﻿<#
     .SYNOPSIS
         AlexK utility module.
     .DESCRIPTION
@@ -21,7 +21,11 @@
 [int]    $Global:modDialogNumber     = 1
 [array]  $Global:modGroupListArray = @()
 
-$res = Import-Module "Pansies" -PassThru
+$res = Get-Module -ListAvailable "Pansies"
+if ( $res ){
+    $res = Import-Module "Pansies" -PassThru
+}
+
 if ( $res ){
     $Global:modPansiesModule = $true
 }
