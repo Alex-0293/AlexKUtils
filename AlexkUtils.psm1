@@ -2976,44 +2976,72 @@ Function Format-TimeSpan {
     switch ($Format) {
         "Auto" {
             if ($TimeSpan.TotalDays -ge 1 ) {
-                $Res = "$([math]::round($TimeSpan.TotalDays,$Round)) days"
+                $Main = "days"
+                $Res  = "$([math]::round($TimeSpan.TotalDays,$Round)) $Main"
             }
             ElseIf ( $TimeSpan.TotalHours -ge 1 ) {
-                $Res = "$([math]::round($TimeSpan.TotalHours,$Round)) hours"
+                $Main = "hours"
+                $Res  = "$([math]::round($TimeSpan.TotalHours,$Round)) $Main"
             }
             ElseIf ( $TimeSpan.TotalMinutes -ge 1 ) {
-                $Res = "$([math]::round($TimeSpan.TotalMinutes,$Round)) minutes"
+                $Main = "minutes"
+                $Res  = "$([math]::round($TimeSpan.TotalMinutes,$Round)) $Main"
             }
             ElseIf ( $TimeSpan.TotalSeconds -ge 1 ) {
-                $Res = "$([math]::round($TimeSpan.TotalSeconds,$Round)) seconds"
+                $Main = "seconds"
+                $Res  = "$([math]::round($TimeSpan.TotalSeconds,$Round)) $Main"
             }
             ElseIf ( $TimeSpan.TotalMilliseconds -ge 1 ) {
-                $Res = "$([math]::round($TimeSpan.TotalMilliseconds,$Round)) milliseconds"
+                $Main = "milliseconds"
+                $Res  = "$([math]::round($TimeSpan.TotalMilliseconds,$Round)) $Main"
             }
             ElseIf ( $TimeSpan.Ticks -ge 1 ) {
-                $Res = "$([math]::round($TimeSpan.Ticks,$Round)) ticks"
+                $Main = "Ticks"
+                $Res  = "$([math]::round($TimeSpan.Ticks,$Round)) $Main"
             }
         }
         "TotalDays" {
-            $Res = "$([math]::round($TimeSpan.TotalDays,$Round)) days"
+            $Main = "days"
+            $Res  = "$([math]::round($TimeSpan.TotalDays,$Round)) $Main"
         }
         "TotalHours" {
-            $Res = "$([math]::round($TimeSpan.TotalHours,$Round)) hours"
+            $Main = "hours"
+            $Res  = "$([math]::round($TimeSpan.TotalHours,$Round)) $Main "
         }
         "TotalMinutes" {
-            $Res = "$([math]::round($TimeSpan.TotalMinutes,$Round)) minutes"
+            $Main = "minutes"
+            $Res  = "$([math]::round($TimeSpan.TotalMinutes,$Round)) $Main"
         }
         "TotalSeconds" {
-            $Res = "$([math]::round($TimeSpan.TotalSeconds,$Round)) seconds"
+            $Main = "seconds"
+            $Res  = "$([math]::round($TimeSpan.TotalSeconds,$Round)) $Main"
         }
         "TotalMilliseconds" {
-            $Res = "$([math]::round($TimeSpan.TotalMilliseconds,$Round)) milliseconds"
+            $Main = "milliseconds"
+            $Res  = "$([math]::round($TimeSpan.TotalMilliseconds,$Round)) $Main"
         }
         "Ticks" {
-            $Res = "$($TimeSpan.ticks) ticks"
+            $Main = "ticks"
+            $Res  = "$($TimeSpan.ticks) $Main"
         }
         Default {}
     }
+
+    if ( $main -eq "days" ){
+        if ( $TimeSpan.TotalDays -ge 365){
+            $Main = "years"
+            $Res  = "$([math]::round($TimeSpan.TotalDays/365,$Round)) $Main"
+        }
+        Elseif ( $TimeSpan.TotalDays -ge 30 ){
+            $Main = "months"
+            $Res  = "$([math]::round($TimeSpan.TotalDays/30,$Round)) $Main"
+        }
+        Elseif ( $TimeSpan.TotalDays -ge 7 ){
+            $Main = "weeks"
+            $Res  = "$([math]::round($TimeSpan.TotalDays/7,$Round)) $Main"
+        }
+    }
+
     return $res
 }
 Function Start-ParallelPortPing {
@@ -4070,7 +4098,7 @@ Function Get-DataStatistic {
     .DESCRIPTION
         Show data statistics
     .EXAMPLE
-        Get-DataStatistic [-Data $Data] [-Statistic $Statistic] [-Color $Color=@("Cyan", "DarkMagenta", "Magenta")]
+        Get-DataStatistic [-Data $Data] [-Statistic $Statistic] [-Color $Color=@("Cyan", "DarkMagenta", "Magenta")] [-PassThru $PassThru]
     .NOTES
         AUTHOR  Alexk
         CREATED 16.03.21
@@ -4084,62 +4112,69 @@ Function Get-DataStatistic {
         [Parameter( Mandatory = $false, Position = 1, HelpMessage = "Show statistic for fields.")]
         [PSObject[]] $Statistic,
         [Parameter( Mandatory = $false, Position = 2, HelpMessage = "Change each line color.")]
-        [String[]] $Color = @("Cyan", "DarkMagenta", "Magenta")
+        [String[]] $Color = @("Cyan", "DarkMagenta", "Magenta"),
+        [Parameter( Mandatory = $false, Position = 3, HelpMessage = "Return PSO.")]
+        [switch] $PassThru
     )
     begin {
         $MessageArray = @()
     }
     process {
+        $PSO    = [PSCustomObject]@{}
         foreach ( $item1 in $Statistic){
             $item = $item1.name
             $ItemType = $item1.type
             $Message  = ""
+
             if ( $ItemType  ) {
+
+                $Detail = [PSCustomObject]@{}
                 switch ($ItemType) {
                     "string" {
-                            $Stat = $data | Measure-Object  -Property $item -AllStats -ErrorVariable LastError -ErrorAction SilentlyContinue
-                            if ( !$LastError ){
-                                $Message = "Count [$item]: [$($Stat.Count)], Sum [$item]: [$($Stat.sum)], Avg [$item]: [$($Stat.Average)], Max [$item]: [$($Stat.Maximum)], Min [$item]: [$($Stat.Minimum)], Dev [$item]: [$($Stat.StandardDeviation)]"
+                        if ( $item.Contains(".") ){
+                            $itemData = $Item.split(".")
 
-                                if ( $Message ) {
-                                    $MessageArray += $Message
-                                }
+                            $ExpandProperty = $itemData[0]
+                            $Property       = $itemData[1]
+
+                            $ExpandedData = $Data | Select-Object -ExpandProperty $ExpandProperty -ErrorAction SilentlyContinue
+                            $ExpandedDataProperties = $ExpandedData | get-member -MemberType NoteProperty
+                            if ( $Property -in $ExpandedDataProperties.name ){
+                                $Unique =  $ExpandedData | Select-Object $Property -Unique | Sort-Object $Property
+                                $Message = "Unique [$item]: [$(($Unique.$Property | where-object { $_ -ne $null }) -join ", " )]"
+                                $PSO  | Add-Member -NotePropertyName $Item -NotePropertyValue $Unique.$Property | where-object { $_ -ne $null }
                             }
-                            else {
-                                if ( $item.Contains(".") ){
-                                    $itemData = $Item.split(".")
-
-                                    $ExpandProperty = $itemData[0]
-                                    $Property       = $itemData[1]
-
-                                    $ExpandedData = $Data | Select-Object -ExpandProperty $ExpandProperty -ErrorAction SilentlyContinue
-                                    $ExpandedDataProperties = $ExpandedData | get-member -MemberType NoteProperty
-                                    if ( $Property -in $ExpandedDataProperties.name ){
-                                        $Unique =  $ExpandedData | Select-Object $Property -Unique
-                                        $Message = "Unique [$item]: [$(($Unique.$Property | where-object { $_ -ne $null }) -join ", " )]"
-                                    }
-                                }
-                                Else {
-                                    $Unique = $Data | Select-Object $item -Unique
-                                    $Message = "Unique [$item]: [$($Unique.$item -join ", ")]"
-                                }
-                            }
-
+                        }
+                        Else {
+                            $Unique = $Data | Select-Object $item -Unique | where-object { $_.$item -ne $null } | Sort-Object $item
+                            $Message = "Unique [$item]: [$($Unique.$item -join ", ")]"
+                            $PSO  | Add-Member -NotePropertyName $Item -NotePropertyValue $Unique.$item
+                        }
                     }
                     "datetime"{
-                        $Sorted = $Data | Sort-Object $item | Select-Object $item
-                        $Start  =  ($Sorted | Select-Object -First 1).$item
-                        $End    =  ($Sorted | Select-Object -Last 1).$item
-                        $Message = "Interval [$item]: [$start] - [$end]"
+                        $Sorted   = $Data | Sort-Object $item | Select-Object $item
+                        $Start    = ($Sorted | Select-Object -First 1).$item
+                        $End      = ($Sorted | Select-Object -Last 1).$item
+                        $TimeSpan = New-TimeSpan -start $Start -end $End
+                        $Interval = Format-TimeSpan -TimeSpan $TimeSpan
+                        $Message  = "Interval [$item]: [$Interval] [$start]-[$end]"
+                        $PSO  | Add-Member -NotePropertyName $Item -NotePropertyValue "[$Interval] [$start]-[$end]"
                     }
                     "int"{
                         try{
                             $Stat = $data | Measure-Object  -Property $item -AllStats
                             $Message = "Count [$item]: [$($Stat.Count)], Sum [$item]: [$($Stat.sum)], Avg [$item]: [$($Stat.Average)], Max [$item]: [$($Stat.Maximum)], Min [$item]: [$($Stat.Minimum)], Dev [$item]: [$($Stat.StandardDeviation)]"
 
-                            if ( $Message ) {
-                                $MessageArray += $Message
+                            $StatMembers = $Stat | Get-Member -MemberType Property
+                            foreach ( $Member in $StatMembers.name) {
+                                $Detail | Add-Member -NotePropertyName $Member -NotePropertyValue $Stat.$Member
                             }
+
+                            $DetailProperties = $Detail | Get-Member -MemberType NoteProperty
+                            if ( $DetailProperties ){
+                                $PSO  | Add-Member -NotePropertyName $Item -NotePropertyValue $Detail
+                            }
+
                         }
                         Catch {}
                     }
@@ -4195,13 +4230,12 @@ Function Get-DataStatistic {
             write-host "$(''.padleft($TotalLen, $Sign))" -ForegroundColor $Color[0]
             Get-ColorText -Text $Messages  -TextColor "DarkBlue" -ParameterColor "DarkYellow"
             write-host "$(''.padleft($TotalLen, $Sign))`n"   -ForegroundColor $Color[0]
-            if ( $Data.count -gt 1000 ){
-                pause
-            }
         }
     }
     end {
-
+        if ( $PassThru ){
+            return $PSO
+        }
     }
 }
 function Show-ColoredTable {
@@ -5725,7 +5759,7 @@ function Get-ErrorReporting {
 #>
 
 
-Export-ModuleMember -Function Get-NewAESKey, Get-VarFromAESFile, Set-VarToAESFile, Disconnect-VPN, Connect-VPN, Add-ToLog, Restart-Switches, Restart-SwitchInInterval, Get-EventList, Send-Email, Start-PSScript, Restart-LocalHostInInterval, Show-Notification, Restart-ServiceInInterval, New-TelegramMessage, Get-SettingsFromFile, Get-HTMLTable, Get-HTMLCol, Get-ContentFromHTMLTemplate, Get-ErrorReporting, Get-CopyByBITS, Show-OpenDialog, Import-ModuleRemotely, Invoke-PSScriptBlock, Get-ACLArray, Set-PSModuleManifest, Get-VarToString, Get-UniqueArrayMembers, Resolve-IPtoFQDNinArray, Get-HelpersData, Get-DifferenceBetweenArrays, Test-Credentials, Convert-FSPath, Start-Program, Test-ElevatedRights, Invoke-CommandWithDebug, Format-TimeSpan, Start-ParallelPortPing, Join-Array, Set-State, Send-Alert, Start-Module, Convert-SpecialCharacters, Get-ListByGroups, Convert-StringToDigitArray, Convert-PSCustomObjectToHashTable, Invoke-TrailerIncrease, Split-words, Remove-Modules, Get-TextLengthPreview, Export-RegistryToFile, Show-ColoredTable, Get-Answer,  Get-AESData, Add-ToDataFile, Get-FromDataFile, Compare-Arrays, Get-ColorText, Get-DiskVolumeInfo, Remove-ItemToRecycleBin, Get-MembersType, Compare-ArraysVisual, Get-FileName, Get-DataStatistic
+Export-ModuleMember -Function Get-NewAESKey, Get-VarFromAESFile, Set-VarToAESFile, Disconnect-VPN, Connect-VPN, Add-ToLog, Restart-Switches, Restart-SwitchInInterval, Get-EventList, Send-Email, Start-PSScript, Restart-LocalHostInInterval, Show-Notification, Restart-ServiceInInterval, New-TelegramMessage, Get-SettingsFromFile, Get-HTMLTable, Get-HTMLCol, Get-ContentFromHTMLTemplate, Get-ErrorReporting, Get-CopyByBITS, Show-OpenDialog, Import-ModuleRemotely, Invoke-PSScriptBlock, Get-ACLArray, Set-PSModuleManifest, Get-VarToString, Get-UniqueArrayMembers, Resolve-IPtoFQDNinArray, Get-HelpersData, Get-DifferenceBetweenArrays, Test-Credentials, Convert-FSPath, Start-Program, Test-ElevatedRights, Invoke-CommandWithDebug, Format-TimeSpan, Start-ParallelPortPing, Join-Array, Set-State, Send-Alert, Start-Module, Convert-SpecialCharacters, Get-ListByGroups, Convert-StringToDigitArray, Convert-PSCustomObjectToHashTable, Invoke-TrailerIncrease, Split-words, Remove-Modules, Get-TextLengthPreview, Export-RegistryToFile, Show-ColoredTable, Get-Answer,  Get-AESData, Add-ToDataFile, Get-FromDataFile, Compare-Arrays, Get-ColorText, Get-DiskVolumeInfo, Remove-ItemToRecycleBin, Get-MembersType, Compare-ArraysVisual, Get-FileName, Get-DataStatistic, Show-UnprintableChars
 
 <#
 
