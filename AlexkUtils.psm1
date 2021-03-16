@@ -1,4 +1,4 @@
-﻿<#
+<#
     .SYNOPSIS
         AlexK utility module.
     .DESCRIPTION
@@ -95,6 +95,12 @@ Function Get-VarFromAESFile  {
     if ( !$AESKeyFilePath ){
         try {
             $AESKeyFilePath = Get-Content -path $VarFilePath -Stream "Key.Path"
+            if ( $AESKeyFilePath[0] -ne '"' ) {
+                $AESKeyFilePath = Invoke-Expression -Command '"' + $AESKeyFilePath + '"'
+            }
+            Else {
+                $AESKeyFilePath = Invoke-Expression -Command $AESKeyFilePath
+            }
         }
         Catch {}
     }
@@ -183,7 +189,9 @@ Function Set-VarToAESFile {
     #>
         if ( test-path -path $AESKeyFilePath ){
             $AESData | Set-Content -path $VarFilePath
-            Set-Content -Path $VarFilePath -Value $AESKeyFilePath -Stream "Key.Path"
+            $NewAESKeyFilePath = '"' + $AESKeyFilePath.replace($Global:gsGlobalSettingsPath,'$($Global:gsGlobalSettingsPath)').replace($Global:gsKEYSFolder,'$($Global:gsKEYSFolder)').replace($Global:ProjectRoot,'$($Global:ProjectRoot)') + '"'
+
+            Set-Content -Path $VarFilePath -Value $NewAESKeyFilePath -Stream "Key.Path"
         }
         Else {
             Write-host "AES key file [$AESKeyFilePath] not found!" -ForegroundColor Red
@@ -1745,7 +1753,7 @@ Function Get-MembersType {
     .DESCRIPTION
         Return object with noteproperty names and types.
     .EXAMPLE
-        Get-MembersType -PSO $PSO
+        Get-MembersType -PSO $PSO [-ExpandPSO $ExpandPSO]
     .NOTES
         AUTHOR  Alexk
         CREATED 09.03.21
@@ -1755,7 +1763,9 @@ Function Get-MembersType {
     [CmdletBinding()]
     Param(
         [Parameter( Mandatory = $true, Position = 0, HelpMessage = "PS object." )]
-        [PSObject] $PSO
+        [PSObject] $PSO,
+        [Parameter( Mandatory = $false, Position = 1, HelpMessage = "Expand PS objects." )]
+        [switch] $ExpandPSO
     )
     begin {
         $Res = @()
@@ -1763,11 +1773,25 @@ Function Get-MembersType {
     process {
         $NoteProperties = $PSO | Get-Member -MemberType NoteProperty
 
+
         foreach ( $item  in $NoteProperties ){
+            #$item.Name
             $ItemType = ( $item.definition -split " " )[0]
-            $NewPSO = [PSCustomObject]@{
-                Name = $item.Name
-                Type = $ItemType
+            if ( (($ItemType -like "*.PSCustomObject") -or ($ItemType -like "*psobject*") ) -and $ExpandPSO ){
+                $ExpandedData = $PSO | Select-Object -ExpandProperty $item.name -ErrorAction SilentlyContinue
+                $ExMembers = Get-MembersType -PSO $ExpandedData -ExpandPSO
+                foreach ( $ExMember in $ExMembers ){
+                    $NewPSO = [PSCustomObject]@{
+                        Name = "$($item.name).$($ExMember.name)"
+                        Type = $ExMember.Type
+                    }
+                }
+            }
+            Else {
+                $NewPSO = [PSCustomObject]@{
+                    Name = $item.Name
+                    Type = $ItemType
+                }
             }
 
             $Res += $NewPSO
@@ -4038,6 +4062,148 @@ function Export-RegistryToFile {
         }
     }
 }
+
+Function Get-DataStatistic {
+<#
+    .SYNOPSIS
+        Get data statistic
+    .DESCRIPTION
+        Show data statistics
+    .EXAMPLE
+        Get-DataStatistic [-Data $Data] [-Statistic $Statistic] [-Color $Color=@("Cyan", "DarkMagenta", "Magenta")]
+    .NOTES
+        AUTHOR  Alexk
+        CREATED 16.03.21
+        VER     1
+#>
+    [OutputType([string])]
+    [CmdletBinding()]
+    Param(
+        [Parameter( Mandatory = $false, Position = 0, HelpMessage = "PsObject data." )]
+        [psObject[]] $Data,
+        [Parameter( Mandatory = $false, Position = 1, HelpMessage = "Show statistic for fields.")]
+        [PSObject[]] $Statistic,
+        [Parameter( Mandatory = $false, Position = 2, HelpMessage = "Change each line color.")]
+        [String[]] $Color = @("Cyan", "DarkMagenta", "Magenta")
+    )
+    begin {
+        $MessageArray = @()
+    }
+    process {
+        foreach ( $item1 in $Statistic){
+            $item = $item1.name
+            $ItemType = $item1.type
+            $Message  = ""
+            if ( $ItemType  ) {
+                switch ($ItemType) {
+                    "string" {
+                            $Stat = $data | Measure-Object  -Property $item -AllStats -ErrorVariable LastError -ErrorAction SilentlyContinue
+                            if ( !$LastError ){
+                                $Message = "Count [$item]: [$($Stat.Count)], Sum [$item]: [$($Stat.sum)], Avg [$item]: [$($Stat.Average)], Max [$item]: [$($Stat.Maximum)], Min [$item]: [$($Stat.Minimum)], Dev [$item]: [$($Stat.StandardDeviation)]"
+
+                                if ( $Message ) {
+                                    $MessageArray += $Message
+                                }
+                            }
+                            else {
+                                if ( $item.Contains(".") ){
+                                    $itemData = $Item.split(".")
+
+                                    $ExpandProperty = $itemData[0]
+                                    $Property       = $itemData[1]
+
+                                    $ExpandedData = $Data | Select-Object -ExpandProperty $ExpandProperty -ErrorAction SilentlyContinue
+                                    $ExpandedDataProperties = $ExpandedData | get-member -MemberType NoteProperty
+                                    if ( $Property -in $ExpandedDataProperties.name ){
+                                        $Unique =  $ExpandedData | Select-Object $Property -Unique
+                                        $Message = "Unique [$item]: [$(($Unique.$Property | where-object { $_ -ne $null }) -join ", " )]"
+                                    }
+                                }
+                                Else {
+                                    $Unique = $Data | Select-Object $item -Unique
+                                    $Message = "Unique [$item]: [$($Unique.$item -join ", ")]"
+                                }
+                            }
+
+                    }
+                    "datetime"{
+                        $Sorted = $Data | Sort-Object $item | Select-Object $item
+                        $Start  =  ($Sorted | Select-Object -First 1).$item
+                        $End    =  ($Sorted | Select-Object -Last 1).$item
+                        $Message = "Interval [$item]: [$start] - [$end]"
+                    }
+                    "int"{
+                        try{
+                            $Stat = $data | Measure-Object  -Property $item -AllStats
+                            $Message = "Count [$item]: [$($Stat.Count)], Sum [$item]: [$($Stat.sum)], Avg [$item]: [$($Stat.Average)], Max [$item]: [$($Stat.Maximum)], Min [$item]: [$($Stat.Minimum)], Dev [$item]: [$($Stat.StandardDeviation)]"
+
+                            if ( $Message ) {
+                                $MessageArray += $Message
+                            }
+                        }
+                        Catch {}
+                    }
+                    Default {}
+                }
+            }
+
+            if ( $Message ) {
+                $MessageArray += $Message
+            }
+        }
+
+        if ( $MessageArray ){
+            write-host "Statistics" -ForegroundColor $Color[0]
+            $MaxLen   = 0
+            $TotalLen = 0
+            foreach ( $item in $MessageArray) {
+                $ItemLen0 = $item.split(":")[0].length
+                if ( $ItemLen0 -gt $MaxLen ){
+                    $MaxLen = $ItemLen0
+                }
+            }
+
+            $AlignedMessageArray = @()
+            foreach ( $item in $MessageArray) {
+                $itemData = $item.split(":")
+                $Part1 = $itemData[0]
+                $Part2 = ($itemData | select-object -skip 1 ) -join ":"
+
+                $Part1Data = $Part1.split(" ")
+                $Part1Part1 = $Part1Data[0]
+                $Part1Part2 = ($Part1Data | select-object -skip 1 ) -join " "
+                $lenToAdd = $MaxLen - $Part1.length + $Part1Part2.Length + 1
+
+                $Part1 = $Part1Part1 + $Part1Part2.PadLeft($lenToAdd, " ")
+                $Newitem = $Part1 + ":" + $Part2
+                $AlignedMessageArray += $Newitem
+            }
+
+            foreach ( $item in $AlignedMessageArray) {
+                $ItemLen = $item.length
+                if ( $ItemLen -gt $TotalLen ){
+                    $TotalLen = $ItemLen
+                }
+            }
+
+            if( $TotalLen -gt $Host.UI.RawUI.WindowSize.Width ){
+                $TotalLen = $Host.UI.RawUI.WindowSize.Width
+            }
+
+            $Messages = $AlignedMessageArray -join ("`n")
+            $Sign = "-"
+            write-host "$(''.padleft($TotalLen, $Sign))" -ForegroundColor $Color[0]
+            Get-ColorText -Text $Messages  -TextColor "DarkBlue" -ParameterColor "DarkYellow"
+            write-host "$(''.padleft($TotalLen, $Sign))`n"   -ForegroundColor $Color[0]
+            if ( $Data.count -gt 1000 ){
+                pause
+            }
+        }
+    }
+    end {
+
+    }
+}
 function Show-ColoredTable {
 <#
     .SYNOPSIS
@@ -4046,9 +4212,9 @@ function Show-ColoredTable {
         Show table in color view.
     .EXAMPLE
         Parameter set: "Alerts"
-        Show-ColoredTable -Field $Field [-Data $Data] [-Definition $Definition] [-View $View] [-Title $Title] [-SelectField $SelectField] [-SelectMessage $SelectMessage] [-Confirmation $Confirmation] [-NotNull $NotNull] [-Single $Single]
+        Show-ColoredTable -Field $Field [-Data $Data] [-Definition $Definition] [-View $View] [-Title $Title] [-SelectField $SelectField] [-SelectMessage $SelectMessage] [-Confirmation $Confirmation] [-Statistic $Statistic] [-NotNull $NotNull] [-Single $Single]
         Parameter set: "Color"
-        Show-ColoredTable [-Data $Data] [-View $View] [-Color $Color=@("Cyan", "DarkMagenta", "Magenta")] [-Title $Title] [-AddRowNumbers $AddRowNumbers] [-SelectField $SelectField] [-SelectMessage $SelectMessage] [-Confirmation $Confirmation] [-NotNull $NotNull] [-Single $Single] [-AddNewLine $AddNewLine=$true] [-NoBackOption $NoBackOption] [-NoOptions $NoOptions] [-PassThru $PassThru]
+        Show-ColoredTable [-Data $Data] [-View $View] [-Color $Color=@("Cyan", "DarkMagenta", "Magenta")] [-Title $Title] [-SelectField $SelectField] [-SelectMessage $SelectMessage] [-Confirmation $Confirmation] [-Statistic $Statistic] [-AddRowNumbers $AddRowNumbers] [-NotNull $NotNull] [-Single $Single] [-AddNewLine $AddNewLine=$true] [-NoBackOption $NoBackOption] [-NoOptions $NoOptions] [-PassThru $PassThru]
     .NOTES
         AUTHOR  Alexk
         CREATED 02.12.20
@@ -4070,25 +4236,27 @@ function Show-ColoredTable {
         [String[]] $Color = @("Cyan", "DarkMagenta", "Magenta"),
         [Parameter( Mandatory = $false, Position = 5, HelpMessage = "Table title.")]
         [String] $Title,
-        [Parameter( Mandatory = $false, Position = 6, HelpMessage = "Add row numbers.", ParameterSetName = "Color" )]
-        [switch] $AddRowNumbers,
-        [Parameter( Mandatory = $false, Position = 7, HelpMessage = "Select field.")]
+        [Parameter( Mandatory = $false, Position = 6, HelpMessage = "Select field.")]
         [string] $SelectField,
-        [Parameter( Mandatory = $false, Position = 8, HelpMessage = "Select message.")]
+        [Parameter( Mandatory = $false, Position = 7, HelpMessage = "Select message.")]
         [string] $SelectMessage,
-        [Parameter( Mandatory = $false, Position = 9, HelpMessage = "Select message.")]
+        [Parameter( Mandatory = $false, Position = 8, HelpMessage = "Select message.")]
         [string] $Confirmation,
-        [Parameter( Mandatory = $false, Position = 10, HelpMessage = "Allow only not null results.")]
+        [Parameter( Mandatory = $false, Position = 9, HelpMessage = "Show statistic for fields.")]
+        [PSObject[]] $Statistic,
+        [Parameter( Mandatory = $false, Position = 10, HelpMessage = "Add row numbers.", ParameterSetName = "Color" )]
+        [switch] $AddRowNumbers,
+        [Parameter( Mandatory = $false, Position = 11, HelpMessage = "Allow only not null results.")]
         [switch] $NotNull,
-        [Parameter( Mandatory = $false, Position = 11, HelpMessage = "Allow only single result.")]
+        [Parameter( Mandatory = $false, Position = 12, HelpMessage = "Allow only single result.")]
         [switch] $Single,
-        [Parameter( Mandatory = $false, Position = 12, HelpMessage = "Add new line at the end.", ParameterSetName = "Color" )]
+        [Parameter( Mandatory = $false, Position = 13, HelpMessage = "Add new line at the end.", ParameterSetName = "Color" )]
         [switch] $AddNewLine = $true,
-        [Parameter( Mandatory = $false, Position = 13, HelpMessage = "Show back option.", ParameterSetName = "Color" )]
+        [Parameter( Mandatory = $false, Position = 14, HelpMessage = "Show back option.", ParameterSetName = "Color" )]
         [switch] $NoBackOption,
-        [Parameter( Mandatory = $false, Position = 14, HelpMessage = "Show no options.", ParameterSetName = "Color" )]
+        [Parameter( Mandatory = $false, Position = 15, HelpMessage = "Show no options.", ParameterSetName = "Color" )]
         [switch] $NoOptions,
-        [Parameter( Mandatory = $false, Position = 15, HelpMessage = "Return object.", ParameterSetName = "Color" )]
+        [Parameter( Mandatory = $false, Position = 16, HelpMessage = "Return object.", ParameterSetName = "Color" )]
         [switch] $PassThru
     )
 
@@ -4109,6 +4277,10 @@ function Show-ColoredTable {
                 $Exit = "`n[e] Exit.   [b] Back.`n"
             }
             Get-ColorText -text $Exit -TextColor $Color[1] -ParameterColor "DarkYellow"
+        }
+
+        if ( $Statistic ) {
+            Get-DataStatistic -Data $Data -Statistic $Statistic -Color $Color
         }
 
         If ( !$View ){
@@ -5217,7 +5389,7 @@ Function Get-FileName {
     .DESCRIPTION
         Generate new file name.
     .EXAMPLE
-        Get-FileName -Name $Name -Extension $Extension [-Prefix $Prefix] [-Suffix $Suffix] [-UseDateTime $UseDateTime]
+        Get-FileName -Name $Name -Extension $Extension [-Prefix $Prefix] [-Suffix $Suffix] [-UseDateTime $UseDateTime] [-UseComputerName $UseComputerName]
     .NOTES
         AUTHOR  Alexk
         CREATED 09.03.21
@@ -5235,14 +5407,19 @@ Function Get-FileName {
         [Parameter( Mandatory = $True, Position = 3, HelpMessage = "Extention." )]
         [string] $Extension,
         [Parameter( Mandatory = $False, Position = 4, HelpMessage = "Use date and time in file name." )]
-        [switch] $UseDateTime
+        [switch] $UseDateTime,
+        [Parameter( Mandatory = $False, Position = 5, HelpMessage = "Use computer name in file name." )]
+        [switch] $UseComputerName
     )
     begin {
         $Res = ""
     }
     process {
+        if ( $UseComputerName ){
+            $Res = "$($env:COMPUTERNAME)-"
+        }
         if ( $prefix ){
-            $Res = "$prefix-"
+            $Res = "$Res$prefix-"
         }
         if ( $name ){
             $Res = "$Res$name"
@@ -5548,7 +5725,7 @@ function Get-ErrorReporting {
 #>
 
 
-Export-ModuleMember -Function Get-NewAESKey, Get-VarFromAESFile, Set-VarToAESFile, Disconnect-VPN, Connect-VPN, Add-ToLog, Restart-Switches, Restart-SwitchInInterval, Get-EventList, Send-Email, Start-PSScript, Restart-LocalHostInInterval, Show-Notification, Restart-ServiceInInterval, New-TelegramMessage, Get-SettingsFromFile, Get-HTMLTable, Get-HTMLCol, Get-ContentFromHTMLTemplate, Get-ErrorReporting, Get-CopyByBITS, Show-OpenDialog, Import-ModuleRemotely, Invoke-PSScriptBlock, Get-ACLArray, Set-PSModuleManifest, Get-VarToString, Get-UniqueArrayMembers, Resolve-IPtoFQDNinArray, Get-HelpersData, Get-DifferenceBetweenArrays, Test-Credentials, Convert-FSPath, Start-Program, Test-ElevatedRights, Invoke-CommandWithDebug, Format-TimeSpan, Start-ParallelPortPing, Join-Array, Set-State, Send-Alert, Start-Module, Convert-SpecialCharacters, Get-ListByGroups, Convert-StringToDigitArray, Convert-PSCustomObjectToHashTable, Invoke-TrailerIncrease, Split-words, Remove-Modules, Get-TextLengthPreview, Export-RegistryToFile, Show-ColoredTable, Get-Answer,  Get-AESData, Add-ToDataFile, Get-FromDataFile, Compare-Arrays, Get-ColorText, Get-DiskVolumeInfo, Remove-ItemToRecycleBin, Get-MembersType, Compare-ArraysVisual, Get-FileName
+Export-ModuleMember -Function Get-NewAESKey, Get-VarFromAESFile, Set-VarToAESFile, Disconnect-VPN, Connect-VPN, Add-ToLog, Restart-Switches, Restart-SwitchInInterval, Get-EventList, Send-Email, Start-PSScript, Restart-LocalHostInInterval, Show-Notification, Restart-ServiceInInterval, New-TelegramMessage, Get-SettingsFromFile, Get-HTMLTable, Get-HTMLCol, Get-ContentFromHTMLTemplate, Get-ErrorReporting, Get-CopyByBITS, Show-OpenDialog, Import-ModuleRemotely, Invoke-PSScriptBlock, Get-ACLArray, Set-PSModuleManifest, Get-VarToString, Get-UniqueArrayMembers, Resolve-IPtoFQDNinArray, Get-HelpersData, Get-DifferenceBetweenArrays, Test-Credentials, Convert-FSPath, Start-Program, Test-ElevatedRights, Invoke-CommandWithDebug, Format-TimeSpan, Start-ParallelPortPing, Join-Array, Set-State, Send-Alert, Start-Module, Convert-SpecialCharacters, Get-ListByGroups, Convert-StringToDigitArray, Convert-PSCustomObjectToHashTable, Invoke-TrailerIncrease, Split-words, Remove-Modules, Get-TextLengthPreview, Export-RegistryToFile, Show-ColoredTable, Get-Answer,  Get-AESData, Add-ToDataFile, Get-FromDataFile, Compare-Arrays, Get-ColorText, Get-DiskVolumeInfo, Remove-ItemToRecycleBin, Get-MembersType, Compare-ArraysVisual, Get-FileName, Get-DataStatistic
 
 <#
 
