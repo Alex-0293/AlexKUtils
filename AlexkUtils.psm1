@@ -1,4 +1,4 @@
-<#
+﻿<#
     .SYNOPSIS
         AlexK utility module.
     .DESCRIPTION
@@ -2785,6 +2785,100 @@ Function Invoke-CommandWithDebug {
     }
 
     Return $EventArray
+}
+function Get-ExportedParameters {
+<#
+    .SYNOPSIS
+        Get exported parameters
+    .DESCRIPTION
+        Function to get modifyed exported parameters.
+    .EXAMPLE
+        Get-ExportedParameters -BoundParameters $BoundParameters [-ChangedParameters $ChangedParameters] [-UseCommonVMParameters $UseCommonVMParameters] [-RemoveParameters $RemoveParameters]
+    .NOTES
+        AUTHOR  Alexk
+        CREATED 12.10.20
+        VER     1
+#>
+    [CmdletBinding()]
+    Param(
+        [Parameter( Mandatory = $false, Position  = 0, HelpMessage = "Funtion bound parameters (PSBoundParameters)." )]
+        $BoundParameters,
+        [Parameter( Mandatory = $false, Position = 1, HelpMessage = "New or changed parameters." )]
+        [PSCustomObject] $ChangedParameters,
+        [Parameter( Mandatory = $false, Position = 2, HelpMessage = "Add computer and credential parameters." )]
+        [switch] $UseCommonVMParameters,
+        [Parameter( Mandatory = $false, Position = 3, HelpMessage = "Remove parameters." )]
+        [string[]] $RemoveParameters
+    )
+
+    if ( $BoundParameters ){
+        Set-Variable -Name "NewExportedParameters" -Value $BoundParameters -Scope "Global"  -Visibility Public #Private
+    }
+    Else {
+        $Empty = new-object "System.Collections.Generic.Dictionary[[string],[string]]"
+        Set-Variable -Name "NewExportedParameters" -Value $Empty -Scope "Global"  -Visibility Public
+    }
+    
+    foreach ( $Param in $ChangedParameters ) {
+        $ParamName  = $Param.name
+        $ParamValue = $Param.value
+        if ( $BoundParameters.keys -contains $ParamName ) {
+            if ( -not $NewExportedParameters.$ParamName ) {
+                $NewExportedParameters.$ParamName = $ParamValue
+            }
+        }
+        Else {
+            $NewExportedParameters.Add($ParamName, $ParamValue)
+        }
+    }
+
+    if ( $UseCommonVMParameters ) {
+
+        $Param = "Computer"
+        if ( $NewExportedParameters.keys -contains $Param ) {
+            If ( -not $NewExportedParameters.$Param ) {
+                $NewExportedParameters.$Param = $Global:modComputer
+            }
+        }
+        Else {
+            $NewExportedParameters.Add( $Param, $Global:modComputer )
+        }
+
+        $Param = "Credentials"
+        if ( $NewExportedParameters.keys -contains $Param ) {
+            If ( -not $NewExportedParameters.$Param  ) {
+                $NewExportedParameters.$Param = $Global:modCredentials
+            }
+        }
+        Else {
+            $NewExportedParameters.Add( $Param, $Global:modCredentials )
+        }
+
+        $Param = "modInputObject"
+        if ( $NewExportedParameters.keys -contains $Param ) {
+            If ( -not $NewExportedParameters.$Param  ) {
+                $NewExportedParameters.$Param = $Global:modInputObject
+            }
+        }
+        Else {
+            $NewExportedParameters.Add( $Param, $Global:modInputObject )
+        }
+
+        $Param = "modReturnObject"
+        if ( $NewExportedParameters.keys -contains $Param ) {
+            If ( -not $NewExportedParameters.$Param  ) {
+                $NewExportedParameters.$Param = $Global:modReturnObject
+            }
+        }
+        Else {
+            $NewExportedParameters.Add( $Param, $Global:modReturnObject )
+        }
+    }
+    [void] $NewExportedParameters.Remove( "PassThru" )
+    foreach ( $Item in $RemoveParameters ){
+        [void] $NewExportedParameters.Remove( $Item )
+    }
+    return $NewExportedParameters
 }
 #endregion
 #region Utils
@@ -5775,7 +5869,7 @@ function Get-ErrorReporting {
 #>
 
 
-Export-ModuleMember -Function Get-NewAESKey, Get-VarFromAESFile, Set-VarToAESFile, Disconnect-VPN, Connect-VPN, Add-ToLog, Restart-Switches, Restart-SwitchInInterval, Get-EventList, Send-Email, Start-PSScript, Restart-LocalHostInInterval, Show-Notification, Restart-ServiceInInterval, New-TelegramMessage, Get-SettingsFromFile, Get-HTMLTable, Get-HTMLCol, Get-ContentFromHTMLTemplate, Get-ErrorReporting, Get-CopyByBITS, Show-OpenDialog, Import-ModuleRemotely, Invoke-PSScriptBlock, Get-ACLArray, Set-PSModuleManifest, Get-VarToString, Get-UniqueArrayMembers, Resolve-IPtoFQDNinArray, Get-HelpersData, Get-DifferenceBetweenArrays, Test-Credentials, Convert-FSPath, Start-Program, Test-ElevatedRights, Invoke-CommandWithDebug, Format-TimeSpan, Start-ParallelPortPing, Join-Array, Set-State, Send-Alert, Start-Module, Convert-SpecialCharacters, Get-ListByGroups, Convert-StringToDigitArray, Convert-PSCustomObjectToHashTable, Invoke-TrailerIncrease, Split-words, Remove-Modules, Get-TextLengthPreview, Export-RegistryToFile, Show-ColoredTable, Get-Answer,  Get-AESData, Add-ToDataFile, Get-FromDataFile, Compare-Arrays, Get-ColorText, Get-DiskVolumeInfo, Remove-ItemToRecycleBin, Get-MembersType, Compare-ArraysVisual, Get-FileName, Get-DataStatistic, Show-UnprintableChars
+Export-ModuleMember -Function Get-NewAESKey, Get-VarFromAESFile, Set-VarToAESFile, Disconnect-VPN, Connect-VPN, Add-ToLog, Restart-Switches, Restart-SwitchInInterval, Get-EventList, Send-Email, Start-PSScript, Restart-LocalHostInInterval, Show-Notification, Restart-ServiceInInterval, New-TelegramMessage, Get-SettingsFromFile, Get-HTMLTable, Get-HTMLCol, Get-ContentFromHTMLTemplate, Get-ErrorReporting, Get-CopyByBITS, Show-OpenDialog, Import-ModuleRemotely, Invoke-PSScriptBlock, Get-ACLArray, Set-PSModuleManifest, Get-VarToString, Get-UniqueArrayMembers, Resolve-IPtoFQDNinArray, Get-HelpersData, Get-DifferenceBetweenArrays, Test-Credentials, Convert-FSPath, Start-Program, Test-ElevatedRights, Invoke-CommandWithDebug, Format-TimeSpan, Start-ParallelPortPing, Join-Array, Set-State, Send-Alert, Start-Module, Convert-SpecialCharacters, Get-ListByGroups, Convert-StringToDigitArray, Convert-PSCustomObjectToHashTable, Invoke-TrailerIncrease, Split-words, Remove-Modules, Get-TextLengthPreview, Export-RegistryToFile, Show-ColoredTable, Get-Answer,  Get-AESData, Add-ToDataFile, Get-FromDataFile, Compare-Arrays, Get-ColorText, Get-DiskVolumeInfo, Remove-ItemToRecycleBin, Get-MembersType, Compare-ArraysVisual, Get-FileName, Get-DataStatistic, Show-UnprintableChars, Get-ExportedParameters
 
 <#
 
