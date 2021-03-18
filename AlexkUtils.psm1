@@ -4138,11 +4138,16 @@ Function Get-DataStatistic {
                             $Property       = $itemData[1]
 
                             $ExpandedData = $Data | Select-Object -ExpandProperty $ExpandProperty -ErrorAction SilentlyContinue
-                            $ExpandedDataProperties = $ExpandedData | get-member -MemberType NoteProperty
-                            if ( $Property -in $ExpandedDataProperties.name ){
-                                $Unique =  $ExpandedData | Select-Object $Property -Unique | Sort-Object $Property
-                                $Message = "Unique [$item]: [$(($Unique.$Property | where-object { $_ -ne $null }) -join ", " )]"
-                                $PSO  | Add-Member -NotePropertyName $Item -NotePropertyValue $Unique.$Property | where-object { $_ -ne $null }
+                            if ( $ExpandedData ) {
+                                $ExpandedDataProperties = $ExpandedData | get-member -MemberType NoteProperty
+                                if ( $Property -in $ExpandedDataProperties.name ){
+                                    $Unique =  $ExpandedData | Select-Object $Property -Unique | Sort-Object $Property
+                                    $Message = "Unique [$item]: [$(($Unique.$Property | where-object { $_ -ne $null }) -join ", " )]"
+                                    $PSO  | Add-Member -NotePropertyName $Item -NotePropertyValue $Unique.$Property | where-object { $_ -ne $null }
+                                }
+                            }
+                            Else {
+                                $Stop
                             }
                         }
                         Else {
@@ -5195,6 +5200,11 @@ Function Get-FromDataFile {
                             $BoolFields += $item
                         }
                         Catch {}
+                        try {
+                            $Int        =  [System.Convert]::ToUInt64( $FileData[0].$item )
+                            $IntFields += $item
+                        }
+                        Catch {}
                     }
                     foreach ( $item in $FileData ) {
                         foreach ( $Date in $DateFields ){
@@ -5206,6 +5216,12 @@ Function Get-FromDataFile {
                         foreach ( $Bool in $BoolFields ){
                             try {
                                 $item.$Bool = [System.Convert]::ToBoolean( $item.$Bool )
+                            }
+                            Catch {}
+                        }
+                        foreach ( $Int in $IntFields ){
+                            try {
+                                $item.$Int = [System.Convert]::ToUInt64( $item.$Int )
                             }
                             Catch {}
                         }
