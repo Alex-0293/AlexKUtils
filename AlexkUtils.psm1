@@ -1,4 +1,4 @@
-<#
+﻿<#
     .SYNOPSIS
         AlexK utility module.
     .DESCRIPTION
@@ -4215,7 +4215,7 @@ Function Get-DataStatistic {
         CREATED 16.03.21
         VER     1
 #>
-    [OutputType([string])]
+    [OutputType([PSObject])]
     [CmdletBinding()]
     Param(
         [Parameter( Mandatory = $false, Position = 0, HelpMessage = "PsObject data." )]
@@ -4231,9 +4231,10 @@ Function Get-DataStatistic {
     )
     begin {
         $MessageArray = @()
-    }
-    process {
         $PSO    = [PSCustomObject]@{}
+
+    }
+    process {        
         $StatisticWithoutExcluded = $Statistic | where-object { $_.name -NotIn $Exclude }
         foreach ( $item1 in $Statistic ){
             $item = $item1.name
@@ -4241,7 +4242,6 @@ Function Get-DataStatistic {
             $Message  = ""
 
             if ( $ItemType  ) {
-
                 $Detail = [PSCustomObject]@{}
                 switch ($ItemType) {
                     "string" {
@@ -4263,9 +4263,6 @@ Function Get-DataStatistic {
                                         $PSO  | Add-Member -NotePropertyName $Item -NotePropertyValue $Unique
                                     }
                                 }
-                            }
-                            Else {
-                                $Stop
                             }
                         }
                         Else {
