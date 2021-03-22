@@ -1,4 +1,4 @@
-﻿<#
+<#
     .SYNOPSIS
         AlexK utility module.
     .DESCRIPTION
@@ -793,7 +793,7 @@ Function Add-ToLog {
                 Format      = $Format
                 Level       = $Level
             }
-            [array] $Global:gsLogBuffer += $Hash
+            [array] $Global:gsLogBuffer += ,@($Hash)
         }
 
         if($Format) {
@@ -1771,7 +1771,7 @@ Function Get-MembersType {
         $Res = @()
     }
     process {
-        $NoteProperties = $PSO | Get-Member -MemberType NoteProperty
+        $NoteProperties = $PSO | select-object -property * | Get-Member -MemberType NoteProperty
 
 
         foreach ( $item  in $NoteProperties ){
@@ -1785,6 +1785,8 @@ Function Get-MembersType {
                         Name = "$($item.name).$($ExMember.name)"
                         Type = $ExMember.Type
                     }
+
+                    $Res += $NewPSO
                 }
             }
             Else {
@@ -1792,9 +1794,9 @@ Function Get-MembersType {
                     Name = $item.Name
                     Type = $ItemType
                 }
-            }
 
-            $Res += $NewPSO
+                $Res += $NewPSO
+            }
         }
     }
     end {
@@ -2287,6 +2289,8 @@ function Invoke-PSScriptBlock {
         )
         begin {
             $PSSessionConfigurationName = 'PowerShell.7'
+
+
         }
         process {
             try {
@@ -2463,14 +2467,19 @@ function Invoke-PSScriptBlock {
                 $Params = $Using:GlobalExportedParameters
             '
 
-            $ScriptBlockWithExportedParams = $ScriptBlock.ToString()
-            $FirstString = ($ScriptBlockWithExportedParams -split "`n")[1]
+            $ScriptBlockWithExportedParams = $ScriptBlock.ToString().trim()
+            $FirstString = ($ScriptBlockWithExportedParams -split "`n")[0]
             $ScriptBlockWithExportedParams = $ScriptBlockWithExportedParams.Replace("Using:", "Params.")
             $ScriptBlockWithExportedParams = $ScriptBlockWithExportedParams.Replace("using:", "Params.")
             $ScriptBlockWithExportedParams = $ScriptBlockWithExportedParams.Replace("USING:", "Params.")
 
             if ( $FirstString -notlike "*param*(*)*" ) {
-                $ScriptBlockWithExportedParams = $NewStrings + $ScriptBlockWithExportedParams
+                if ( $FirstString -notlike "*Begin*{*" ){
+                    $ScriptBlockWithExportedParams = $NewStrings + $ScriptBlockWithExportedParams
+                }
+                Else {
+                    $ScriptBlockWithExportedParams = $FirstString + $NewStrings + (($ScriptBlockWithExportedParams  -split "`n" | Select-Object -skip 1) -join "`n")
+                }
             }
 
             if ( $DebugSession ){
@@ -2513,6 +2522,9 @@ function Invoke-PSScriptBlock {
     Else {
         $LocalScriptBlock = [scriptblock]::Create($ScriptBlock.ToString().Replace("Using:", ""))
         $Res = Invoke-Command -ScriptBlock $LocalScriptBlock
+    }
+    if ( $Res -is [PSObject] ){
+        $Res | Add-Member -NotePropertyName "Session" -NotePropertyValue $Global:modSession
     }
 
     return $Res
@@ -2793,7 +2805,7 @@ function Get-ExportedParameters {
     .DESCRIPTION
         Function to get modifyed exported parameters.
     .EXAMPLE
-        Get-ExportedParameters -BoundParameters $BoundParameters [-ChangedParameters $ChangedParameters] [-UseCommonVMParameters $UseCommonVMParameters] [-RemoveParameters $RemoveParameters]
+        Get-ExportedParameters [-BoundParameters $BoundParameters] [-ChangedParameters $ChangedParameters] [-UseCommonVMParameters $UseCommonVMParameters] [-RemoveParameters $RemoveParameters]
     .NOTES
         AUTHOR  Alexk
         CREATED 12.10.20
@@ -2818,7 +2830,7 @@ function Get-ExportedParameters {
         $Empty = new-object "System.Collections.Generic.Dictionary[[string],[string]]"
         Set-Variable -Name "NewExportedParameters" -Value $Empty -Scope "Global"  -Visibility Public
     }
-    
+
     foreach ( $Param in $ChangedParameters ) {
         $ParamName  = $Param.name
         $ParamValue = $Param.value
@@ -2828,7 +2840,12 @@ function Get-ExportedParameters {
             }
         }
         Else {
-            $NewExportedParameters.Add($ParamName, $ParamValue)
+            if ( $ParamValue ){
+                $Type = $ParamValue.GetType().name
+                $ParamWithType = new-object "System.Collections.Generic.Dictionary[[string],[$Type]]"
+                $ParamWithType.Add($ParamName, $ParamValue)
+                $NewExportedParameters += $ParamWithType
+            }
         }
     }
 
@@ -4192,7 +4209,7 @@ Function Get-DataStatistic {
     .DESCRIPTION
         Show data statistics
     .EXAMPLE
-        Get-DataStatistic [-Data $Data] [-Statistic $Statistic] [-Color $Color=@("Cyan", "DarkMagenta", "Magenta")] [-PassThru $PassThru]
+        Get-DataStatistic [-Data $Data] [-Statistic $Statistic] [-Exclude $Exclude] [-Color $Color=@("Cyan", "DarkMagenta", "Magenta")] [-PassThru $PassThru]
     .NOTES
         AUTHOR  Alexk
         CREATED 16.03.21
@@ -4205,9 +4222,11 @@ Function Get-DataStatistic {
         [psObject[]] $Data,
         [Parameter( Mandatory = $false, Position = 1, HelpMessage = "Show statistic for fields.")]
         [PSObject[]] $Statistic,
-        [Parameter( Mandatory = $false, Position = 2, HelpMessage = "Change each line color.")]
+        [Parameter( Mandatory = $false, Position = 2, HelpMessage = "Exclude fields to display.")]
+        [PSObject[]] $Exclude,
+        [Parameter( Mandatory = $false, Position = 3, HelpMessage = "Change each line color.")]
         [String[]] $Color = @("Cyan", "DarkMagenta", "Magenta"),
-        [Parameter( Mandatory = $false, Position = 3, HelpMessage = "Return PSO.")]
+        [Parameter( Mandatory = $false, Position = 4, HelpMessage = "Return PSO.")]
         [switch] $PassThru
     )
     begin {
@@ -4215,7 +4234,8 @@ Function Get-DataStatistic {
     }
     process {
         $PSO    = [PSCustomObject]@{}
-        foreach ( $item1 in $Statistic){
+        $StatisticWithoutExcluded = $Statistic | where-object { $_.name -NotIn $Exclude }
+        foreach ( $item1 in $Statistic ){
             $item = $item1.name
             $ItemType = $item1.type
             $Message  = ""
@@ -4235,9 +4255,13 @@ Function Get-DataStatistic {
                             if ( $ExpandedData ) {
                                 $ExpandedDataProperties = $ExpandedData | get-member -MemberType NoteProperty
                                 if ( $Property -in $ExpandedDataProperties.name ){
-                                    $Unique =  $ExpandedData | Select-Object $Property -Unique | Sort-Object $Property
-                                    $Message = "Unique [$item]: [$(($Unique.$Property | where-object { $_ -ne $null }) -join ", " )]"
-                                    $PSO  | Add-Member -NotePropertyName $Item -NotePropertyValue $Unique.$Property | where-object { $_ -ne $null }
+                                    $Unique =  ($ExpandedData | Select-Object $Property -Unique | where-object { $null -ne $_.$Property } | Sort-Object $Property).$Property
+                                    if ( $Unique ){
+                                        if ( ( $item -in $StatisticWithoutExcluded.name ) -and ( ( $Global:ExcludeValues | Where-Object { $Unique -contains $_ } ).count -lt $Unique.count ) ){
+                                            $Message = "Unique [$item]: [$($Unique -join ", " )]"
+                                        }
+                                        $PSO  | Add-Member -NotePropertyName $Item -NotePropertyValue $Unique
+                                    }
                                 }
                             }
                             Else {
@@ -4245,24 +4269,55 @@ Function Get-DataStatistic {
                             }
                         }
                         Else {
-                            $Unique = $Data | Select-Object $item -Unique | where-object { $_.$item -ne $null } | Sort-Object $item
-                            $Message = "Unique [$item]: [$($Unique.$item -join ", ")]"
-                            $PSO  | Add-Member -NotePropertyName $Item -NotePropertyValue $Unique.$item
+                            $Unique = ($Data | Select-Object $item -Unique | where-object { $null -ne $_.$item } | where-object {$_.$item.gettype().name -eq "string"} | Sort-Object $item).$item
+                            if ( $Unique ){
+                                if ( ( $item -in $StatisticWithoutExcluded.name ) -and ( ( $Global:ExcludeValues | Where-Object { $Unique -contains $_ } ).count -lt $Unique.count ) ){
+                                    $Message = "Unique [$item]: [$($Unique -join ", ")]"
+                                }
+                                $PSO  | Add-Member -NotePropertyName $Item -NotePropertyValue $Unique.$item
+                            }
                         }
                     }
-                    "datetime"{
-                        $Sorted   = $Data | Sort-Object $item | Select-Object $item
-                        $Start    = ($Sorted | Select-Object -First 1).$item
-                        $End      = ($Sorted | Select-Object -Last 1).$item
-                        $TimeSpan = New-TimeSpan -start $Start -end $End
-                        $Interval = Format-TimeSpan -TimeSpan $TimeSpan
-                        $Message  = "Interval [$item]: [$Interval] [$start]-[$end]"
-                        $PSO  | Add-Member -NotePropertyName $Item -NotePropertyValue "[$Interval] [$start]-[$end]"
+                    "datetime" {
+                        if ( $item.Contains(".") ){
+                            $itemData = $Item.split(".")
+
+                            $ExpandProperty = $itemData[0]
+                            $Property       = $itemData[1]
+
+                            $ExpandedData = ($Data | Select-Object -ExpandProperty $ExpandProperty -ErrorAction SilentlyContinue).$Property
+
+                            $Sorted   = $ExpandedData | Sort-Object $Property
+                            $Start    = $Sorted | Select-Object -First 1
+                            $End      = $Sorted | Select-Object -Last 1
+                        }
+                        Else {
+                            $Sorted   = $Data | Sort-Object $item | Select-Object $item
+                            $Start    = ($Sorted | Select-Object -First 1).$item
+                            $End      = ($Sorted | Select-Object -Last 1).$item
+                        }
+
+                        if ( $Start -and $end ){
+                            $TimeSpan = New-TimeSpan -start $Start -end $End
+                            $Interval = Format-TimeSpan -TimeSpan $TimeSpan
+                            if ( $item -in $StatisticWithoutExcluded.name ){
+                                if ( $interval ) {
+                                    $Message  = "Interval [$item]: [$Interval] [$start]-[$end]"
+                                }
+                                Else {
+                                    $Message  = "Interval [$item]: [$start]"
+                                }
+                            }
+                            $PSO  | Add-Member -NotePropertyName $Item -NotePropertyValue "[$Interval] [$start]-[$end]"
+                        }
+
                     }
-                    "int"{
+                    "int" {
                         try{
                             $Stat = $data | Measure-Object  -Property $item -AllStats
-                            $Message = "Count [$item]: [$($Stat.Count)], Sum [$item]: [$($Stat.sum)], Avg [$item]: [$($Stat.Average)], Max [$item]: [$($Stat.Maximum)], Min [$item]: [$($Stat.Minimum)], Dev [$item]: [$($Stat.StandardDeviation)]"
+                            if ( $item -in $StatisticWithoutExcluded.name ){
+                                $Message = "Interval [$item]: [$($Stat.Minimum)]] - [$($Stat.Maximum)], count [$($Stat.Count)]"
+                            }
 
                             $StatMembers = $Stat | Get-Member -MemberType Property
                             foreach ( $Member in $StatMembers.name) {
@@ -4286,7 +4341,7 @@ Function Get-DataStatistic {
             }
         }
 
-        if ( $MessageArray ){
+        if ( $MessageArray -and !$PassThru ){
             write-host "Statistics" -ForegroundColor $Color[0]
             $MaxLen   = 0
             $TotalLen = 0
@@ -4345,9 +4400,9 @@ function Show-ColoredTable {
         Show table in color view.
     .EXAMPLE
         Parameter set: "Alerts"
-        Show-ColoredTable -Field $Field [-Data $Data] [-Definition $Definition] [-View $View] [-Title $Title] [-SelectField $SelectField] [-SelectMessage $SelectMessage] [-Confirmation $Confirmation] [-Statistic $Statistic] [-NotNull $NotNull] [-Single $Single]
+        Show-ColoredTable -Field $Field [-Data $Data] [-Definition $Definition] [-View $View] [-Title $Title] [-SelectField $SelectField] [-SelectMessage $SelectMessage] [-Confirmation $Confirmation] [-Statistic $Statistic] [-Exclude $Exclude] [-NotNull $NotNull] [-Single $Single]
         Parameter set: "Color"
-        Show-ColoredTable [-Data $Data] [-View $View] [-Color $Color=@("Cyan", "DarkMagenta", "Magenta")] [-Title $Title] [-SelectField $SelectField] [-SelectMessage $SelectMessage] [-Confirmation $Confirmation] [-Statistic $Statistic] [-AddRowNumbers $AddRowNumbers] [-NotNull $NotNull] [-Single $Single] [-AddNewLine $AddNewLine=$true] [-NoBackOption $NoBackOption] [-NoOptions $NoOptions] [-PassThru $PassThru]
+        Show-ColoredTable [-Data $Data] [-View $View] [-Color $Color=@("Cyan", "DarkMagenta", "Magenta")] [-Title $Title] [-SelectField $SelectField] [-SelectMessage $SelectMessage] [-Confirmation $Confirmation] [-Statistic $Statistic] [-Exclude $Exclude] [-AddRowNumbers $AddRowNumbers] [-NotNull $NotNull] [-Single $Single] [-AddNewLine $AddNewLine=$true] [-NoBackOption $NoBackOption] [-NoOptions $NoOptions] [-PassThru $PassThru]
     .NOTES
         AUTHOR  Alexk
         CREATED 02.12.20
@@ -4377,19 +4432,21 @@ function Show-ColoredTable {
         [string] $Confirmation,
         [Parameter( Mandatory = $false, Position = 9, HelpMessage = "Show statistic for fields.")]
         [PSObject[]] $Statistic,
-        [Parameter( Mandatory = $false, Position = 10, HelpMessage = "Add row numbers.", ParameterSetName = "Color" )]
+        [Parameter( Mandatory = $false, Position = 10, HelpMessage = "Exclude fields to display.")]
+        [PSObject[]] $Exclude,
+        [Parameter( Mandatory = $false, Position = 11, HelpMessage = "Add row numbers.", ParameterSetName = "Color" )]
         [switch] $AddRowNumbers,
-        [Parameter( Mandatory = $false, Position = 11, HelpMessage = "Allow only not null results.")]
+        [Parameter( Mandatory = $false, Position = 12, HelpMessage = "Allow only not null results.")]
         [switch] $NotNull,
-        [Parameter( Mandatory = $false, Position = 12, HelpMessage = "Allow only single result.")]
+        [Parameter( Mandatory = $false, Position = 13, HelpMessage = "Allow only single result.")]
         [switch] $Single,
-        [Parameter( Mandatory = $false, Position = 13, HelpMessage = "Add new line at the end.", ParameterSetName = "Color" )]
+        [Parameter( Mandatory = $false, Position = 14, HelpMessage = "Add new line at the end.", ParameterSetName = "Color" )]
         [switch] $AddNewLine = $true,
-        [Parameter( Mandatory = $false, Position = 14, HelpMessage = "Show back option.", ParameterSetName = "Color" )]
+        [Parameter( Mandatory = $false, Position = 15, HelpMessage = "Show back option.", ParameterSetName = "Color" )]
         [switch] $NoBackOption,
-        [Parameter( Mandatory = $false, Position = 15, HelpMessage = "Show no options.", ParameterSetName = "Color" )]
+        [Parameter( Mandatory = $false, Position = 16, HelpMessage = "Show no options.", ParameterSetName = "Color" )]
         [switch] $NoOptions,
-        [Parameter( Mandatory = $false, Position = 16, HelpMessage = "Return object.", ParameterSetName = "Color" )]
+        [Parameter( Mandatory = $false, Position = 17, HelpMessage = "Return object.", ParameterSetName = "Color" )]
         [switch] $PassThru
     )
 
@@ -4413,7 +4470,7 @@ function Show-ColoredTable {
         }
 
         if ( $Statistic ) {
-            Get-DataStatistic -Data $Data -Statistic $Statistic -Color $Color
+            $StatData = Get-DataStatistic -Data $Data -Statistic $Statistic -Exclude $Exclude -Color $Color
         }
 
         If ( !$View ){
@@ -5088,19 +5145,19 @@ Function Add-ToDataFile {
         $Array       = @()
         $FileMembers = $null
 
-        $FileExtention = split-path -path $FilePath -Extension
+        $FileExtension = $FilePath.split(".") | Select-Object -last 1
 
         $FileData = @()
         if ( ( test-path -path $FilePath ) -and ( -not $Replace ) ){
             try{
-                switch ( $FileExtention ) {
-                    ".XML" {
+                switch ( $FileExtension ) {
+                    "XML" {
                         $FileData += import-cliXML -path $FilePath
                     }
-                    ".CSV" {
+                    "CSV" {
                         $FileData += import-csv -path $FilePath
                     }
-                    ".JSON" {
+                    "JSON" {
                         $FileData += get-content -path $FilePath
                     }
                     Default {}
@@ -5111,10 +5168,10 @@ Function Add-ToDataFile {
                 exit 1
             }
 
-            switch ( $FileExtention ) {
-                ".XML" {
+            switch ( $FileExtension ) {
+                "XML" {
                 }
-                ".CSV" {
+                "CSV" {
                     $DateFields = @()
                     $BoolFields = @()
                     $IntFields  = @()
@@ -5145,7 +5202,7 @@ Function Add-ToDataFile {
                         }
                     }
                 }
-                ".JSON" {
+                "JSON" {
                     $FileData  = $FileData | ConvertFrom-JSON
 
                     $DateFields = $FileData.PSobject.members | where-object { $_.TypeNameOfValue -eq "System.Management.Automation.PSCustomObject"}
@@ -5207,14 +5264,14 @@ Function Add-ToDataFile {
                 }
             }
 
-            switch ( $FileExtention ) {
-                ".XML" {
+            switch ( $FileExtension ) {
+                "XML" {
                     $Array | Export-CliXML -path $FilePath -force
                 }
-                ".CSV" {
+                "CSV" {
                     $Array | export-csv -path $FilePath -force
                 }
-                ".JSON" {
+                "JSON" {
                     $Array | ConvertTo-Json | Set-Content -path $FilePath -force
                 }
                 Default {}
@@ -5248,7 +5305,7 @@ Function Get-FromDataFile {
     )
     begin {
         $Array       = @()
-        $FileExtention = split-path -path $FilePath -Extension
+        $FileExtension = split-path -path $FilePath -Extension
         $FileExist = test-path -path $FilePath
         if ( -not ( $FileExist )){
             Add-ToLog -Message "File [$FilePath] doesn't exist!" -logFilePath $Global:gsScriptLogFilePath -Display -Status "Warning"
@@ -5258,7 +5315,7 @@ Function Get-FromDataFile {
         if ( $FileExist ) {
             $FileData = @()
             try{
-                switch ( $FileExtention ) {
+                switch ( $FileExtension ) {
                     ".XML" {
                         $FileData += import-cliXML -path $FilePath
                     }
@@ -5276,7 +5333,7 @@ Function Get-FromDataFile {
                 exit 1
             }
 
-            switch ( $FileExtention ) {
+            switch ( $FileExtension ) {
                 ".XML" {
                 }
                 ".CSV" {
@@ -5525,7 +5582,6 @@ Function Remove-ItemToRecycleBin {
         }
     }
 }
-
 Function Get-FileName {
 <#
     .SYNOPSIS
@@ -5548,7 +5604,7 @@ Function Get-FileName {
         [string] $Prefix,
         [Parameter( Mandatory = $false, Position = 2, HelpMessage = "Suffix." )]
         [string] $Suffix,
-        [Parameter( Mandatory = $True, Position = 3, HelpMessage = "Extention." )]
+        [Parameter( Mandatory = $True, Position = 3, HelpMessage = "Extension." )]
         [string] $Extension,
         [Parameter( Mandatory = $False, Position = 4, HelpMessage = "Use date and time in file name." )]
         [switch] $UseDateTime,
@@ -5584,7 +5640,6 @@ Function Get-FileName {
         return $res
     }
 }
-
 #endregion
 #region Dialog
 Function Show-OpenDialog{
