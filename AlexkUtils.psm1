@@ -86,10 +86,12 @@ Function Get-VarFromAESFile  {
     param
     (
         [Parameter(Mandatory = $false, Position = 0, HelpMessage = "Path to AES key file." )]
-        [string]$AESKeyFilePath,
+        [string] $AESKeyFilePath,
         [Parameter(Mandatory=$true, Position=1, HelpMessage = "Encrypted file path." )]
         [ValidateNotNullOrEmpty()]
-        [string]$VarFilePath
+        [string] $VarFilePath,
+        [Parameter(Mandatory=$false, Position=2, HelpMessage = "Return string object." )]
+        [switch] $AsString
     )
 
     if ( !$AESKeyFilePath ){
@@ -143,7 +145,12 @@ Function Get-VarFromAESFile  {
         $Res = $null
     }
 
-    return $Res
+    if ( $AsString ){
+        return Get-VarToString -Var $Res
+    }
+    Else {
+        return $Res
+    }
 }
 Function Set-VarToAESFile {
 <#
@@ -778,6 +785,9 @@ Function Add-ToLog {
         if ( -not $PSBoundParameters.ContainsKey("Level") ) {
             if( -not $Global:gsParentLevel ){
                 [int16] $Level = [int16] $Global:gsParentLevel + 1
+            }
+            Else {
+                [int16] $Level = [int16] $Global:gsParentLevel
             }
         }
 
@@ -1980,7 +1990,9 @@ Function Compare-ArraysVisual {
         $View  = @()
         $View += $KeyField
         $View += $MandatoryMembers
-        $View += ($Changed | get-member -MemberType NoteProperty).name | Where-Object { $_ -notin $View }
+        if ( $Changed ){
+            $View += ($Changed | get-member -MemberType NoteProperty).name | Where-Object { $_ -notin $View }
+        }
 
         if ( $Changed ) {
             Show-ColoredTable -Data $Changed -View $View -Title "Changed items" -AddRowNumbers -AddNewLine
@@ -2289,7 +2301,7 @@ function Invoke-PSScriptBlock {
         )
         begin {
             $PSSessionConfigurationName = 'PowerShell.7'
-
+            $State                      = $True
 
         }
         process {
@@ -2319,28 +2331,48 @@ function Invoke-PSScriptBlock {
                                         Add-ToLog -Message $LastError.ErrorRecord -logFilePath $Global:gsScriptLogFilePath -Display -Status "Error"
                                     }
                                     Add-ToLog -Message "Creating new [http] session to [$($StartParams.computer)]." -logFilePath $Global:gsScriptLogFilePath -Display -category "session" -Status "info"
-                                    $Global:modSession       = New-PSSession @StartParams
-                                    Add-ToLog -Message "Successfull." -logFilePath $Global:gsScriptLogFilePath -Display -category "session" -Status "info"
-                                }
+                                    try {
+                                        $Global:modSession       = New-PSSession @StartParams
+                                        Add-ToLog -Message "Successfull." -logFilePath $Global:gsScriptLogFilePath -Display -category "session" -Status "info"
+                                    }
+                                    Catch {
+                                        Add-ToLog -Message "Unsuccessful." -logFilePath $Global:gsScriptLogFilePath -Display -category "session" -Status "error"
+                                        $State = $False
+                                    }
+                                }                                
                             }
                             Else {
                                 Add-ToLog -Message "Creating new [http] session to [$($StartParams.computer)]." -logFilePath $Global:gsScriptLogFilePath -Display -category "session" -Status "info"
-                                $Global:modSession       = New-PSSession @StartParams
-                                Add-ToLog -Message "Successfull." -logFilePath $Global:gsScriptLogFilePath -Display -category "session" -Status "info"
+                                try {
+                                    $Global:modSession       = New-PSSession @StartParams
+                                    Add-ToLog -Message "Successfull." -logFilePath $Global:gsScriptLogFilePath -Display -category "session" -Status "info"
+                                }
+                                Catch {
+                                    Add-ToLog -Message "Unsuccessful." -logFilePath $Global:gsScriptLogFilePath -Display -category "session" -Status "error"
+                                    $State = $False
+                                }
                             }
                         }
                         Default {
                             Add-ToLog -Message "Creating new [http] session to [$($StartParams.computer)]." -logFilePath $Global:gsScriptLogFilePath -Display -category "session" -Status "info"
-                            $Global:modSession       = New-PSSession @StartParams
-                            Add-ToLog -Message "Successfull." -logFilePath $Global:gsScriptLogFilePath -Display -category "session" -Status "info"
+                            try {
+                                $Global:modSession       = New-PSSession @StartParams
+                                Add-ToLog -Message "Successfull." -logFilePath $Global:gsScriptLogFilePath -Display -category "session" -Status "info"
+                            }
+                            Catch {
+                                Add-ToLog -Message "Unsuccessful." -logFilePath $Global:gsScriptLogFilePath -Display -category "session" -Status "error"
+                                $State = $False
+                            }
                         }
                     }
                 }
             }
-            $Global:modPSSessionCounter ++
+            if ( $State ){
+                $Global:modPSSessionCounter ++
+            }
         }
         end {
-
+            $stop
         }
     }
     #https://stackoverflow.com/questions/28362175/powershell-debug-invoke-command
@@ -2896,6 +2928,186 @@ function Get-ExportedParameters {
         [void] $NewExportedParameters.Remove( $Item )
     }
     return $NewExportedParameters
+}
+Function Test-RemoteHostWSMAN {
+<#
+    .DESCRIPTION
+        Check host WSMAN accessibility.
+#>
+    [OutputType([bool])]
+    [CmdletBinding()]
+    Param(
+        [Parameter( Mandatory = $true, Position = 0, HelpMessage = "Remote host name." )]
+        [string] $RemoteHostName,
+        [Parameter( Mandatory = $true, Position = 1, HelpMessage = "Remote host credential." )]
+        [PSCredential]$RemoteHostCredential,
+        [Parameter( Mandatory = $false, Position = 2, HelpMessage = "If add to trusted host." )]
+        [switch] $AddToTrusted
+    ) 
+    begin {
+        function Test-WinRMCustom {
+            Param(
+                [Parameter( Mandatory = $true, Position = 0, HelpMessage = "Remote host name." )]
+                [string] $Transport,
+                [Parameter( Mandatory = $true, Position = 1, HelpMessage = "Remote host name." )]
+                [string] $RemoteHostName,
+                [Parameter( Mandatory = $true, Position = 2, HelpMessage = "Remote host credential." )]
+                [PSCredential]$RemoteHostCredential,
+                [Parameter( Mandatory = $false, Position = 3, HelpMessage = "Certificate thumbprint." )]
+                [string] $Thumbprint,
+                [Parameter( Mandatory = $false, Position = 4, HelpMessage = "If add to trusted host." )]
+                [switch] $AddToTrusted
+            ) 
+
+            if ( $transport -eq "http" ){
+                $WinRM = Test-WSMan -ComputerName  $RemoteHostName -Credential $RemoteHostCredential  -Authentication default -ErrorVariable LastError -ErrorAction SilentlyContinue
+            }
+            ElseIf ( $transport -eq "https" ) {
+                    $WinRM = Test-WSMan -ComputerName $RemoteHostName -Credential $RemoteHostCredential  -Authentication default -UseSSL -ErrorVariable LastError -ErrorAction SilentlyContinue
+            }
+    
+            if ( $LastError ){
+                if ( $AddToTrusted ) {
+                    $TrustedHostList = gsudo "( get-Item WSMan:\localhost\Client\TrustedHosts ).Value -split ','"
+                    if ( $RemoteHostName -notin $TrustedHostList ){
+                        Add-ToLog -Message "Adding remote host [$RemoteHostName] to trusted host list." -logFilePath $Global:gsScriptLogFilePath -Display -category "add to trusted" -Status "info"
+                        sudo "Set-Item WSMan:\localhost\Client\TrustedHosts -Value ""$RemoteHostName"" -Concatenate -force"
+                    }
+                }
+    
+                [xml]$Content = $LastError.Exception.message
+                switch -wildcard ( $content.WSManFault.Code ) {
+                    5 {
+                        # Access is denied.
+                        Add-ToLog -Message "Connecting to [winrm] [$Transport] on [$RemoteHostName] under user [$($RemoteHostCredential.UserName)] failed with error [Access is denied.]!" -logFilePath $Global:gsScriptLogFilePath -Display -category "wsman" -Status "error"
+                        return $False
+                    }
+                    "*The SSL certificate is signed by an unknown certificate authority.*" {                        
+                        Add-ToLog -Message "Error while connecting [winrm] [$Transport] to [$RemoteHostName] under user [$($RemoteHostCredential.UserName)]!`n$($content.WSManFault.message)" -logFilePath $Global:gsScriptLogFilePath -Display -category "WinRM" -Status "error"
+
+                        $CertFolderPath = "$($Global:ProjectRoot)\$($Global:gsDATAFolder)\CERT"
+                        $Certificate = get-ChildItem -path $CertFolderPath -Filter "*.cer" -Recurse | Where-Object { $_.name -eq "$RemoteHostName-PS-Cert.cer" } | Select-Object -First 1
+                        if ( $Certificate ){
+                            $Answer = Get-Answer -Title "Do you want to install [e]xisted certificate [$($Certificate.Name)], http connection [I]nstalling remote certificate, just [h]ttp connection? " -ChooseFrom "E", "I", "H" -DefaultChoose "I" -AddNewLine -NotNull
+                        }
+                        Else {
+                            $Answer = Get-Answer -Title "Do you want to [I]nstall remote certificate, just [h]ttp connection? " -ChooseFrom  "I", "H" -DefaultChoose "I" -AddNewLine -NotNull
+                        }
+                        if ( $Answer -eq "I") {
+                            $Res = Test-WinRMCustom -Transport "http" -RemoteHostName $RemoteHostName -RemoteHostCredential $RemoteHostCredential
+                            
+                            if ( $Res ){
+                                
+                                $Scriptblock = {
+                                    $IP = $Using:IP
+                                    $Global:modReturnObject = [PSCustomObject]@{
+                                        Status      = $null
+                                        Object      = $null
+                                        Error       = $null
+                                        gsLogBuffer = $Null
+                                    }                                    
+
+                                    $WinRMInstances = Get-WSManInstance -Enumerate -ResourceURI "winrm/config/Listener"
+                                    try {
+                                        $DefaultHTTPSListener = $WinRMInstances | Where-Object { ( $_.transport -eq "HTTPS" ) -and ( $_.enabled -eq $true ) -and ( $_.address -eq "IP:$IP")}
+
+                                        $CertThumb = $DefaultHTTPSListener.CertificateThumbprint
+
+                                        $Cert = Get-ChildItem -path cert:\LocalMachine\Root  | Where-Object{ $_.Thumbprint -eq $CertThumb } | select-object -first 1
+
+                                        $CertFile = Get-FileName -Name WinRM -Extension "cer" -UseDateTime -UseComputerName
+                                        $CertPath = "$($env:TEMP)\$CertFile"
+
+                                        Export-Certificate -Cert $Cert -FilePath $CertPath | out-null
+                                        if ( test-path $CertPath ){
+                                            $modReturnObject.Object  = @(,[System.IO.File]::ReadAllBytes($CertPath))
+                                        }
+                                        $modReturnObject.status      = $True
+                                    }
+                                    Catch {
+                                        $modReturnObject.status      = $False
+                                        $modReturnObject.Error       = $_
+                                    }
+                                    
+                                    
+                                    return $modReturnObject                            
+                                }
+        
+                                $IP = [System.Net.Dns]::GetHostAddresses( $RemoteHostName ).IPAddressToString
+                                $ChangedParameters  = @()
+                                $ChangedParameters += [PSCustomObject]@{ Name = "IP"; Value = $IP }
+                                $ExportedParameters = Get-ExportedParameters -ChangedParameters $ChangedParameters
+                                
+                                $Res1 = Invoke-PSScriptBlock -ScriptBlock $Scriptblock -Computer $RemoteHostName -Credentials $RemoteHostCredential  -ExportedParameters $ExportedParameters -ImportLocalModule "AlexkUtils"
+        
+                                if ( $Res1.status ){
+                                    $CertFolderPath = "$($Global:ProjectRoot)\$($Global:gsDATAFolder)\CERT"
+                                    if ( !(Test-path -path $CertFolderPath)){
+                                        new-item -path $CertFolderPath -ItemType Directory
+                                    }
+
+                                    $CertFilePath =  "$CertFolderPath\$Computer-PS-Cert.cer"
+                                    $Res1.Object | Set-Content -path $CertFilePath -AsByteStream
+                                    Add-ToLog -Message "Adding remote host [$Computer] certificate, to local store [LocalMachine\Root]." -logFilePath $Global:gsScriptLogFilePath -Display -category "certificate" -Status "info"
+                                    gsudo "Import-Certificate -FilePath ""$CertFilePath"" -CertStoreLocation ""Cert:\LocalMachine\Root"""
+
+                                    $Res = Test-WinRMCustom -transport "https" -RemoteHostName $RemoteHostName -RemoteHostCredential $RemoteHostCredential 
+                                }
+                                Else {
+                                    Add-ToLog -Message "Error while getting https certificate on [$RemoteHostName]. $($Res1.Error)" -logFilePath $Global:gsScriptLogFilePath -Display -category "info" -Status "error"
+                                }
+                            }
+                        }
+                        Elseif ( $Answer -eq "E" ){
+                            $CertFilePath = $Certificate.FullName
+                            gsudo "Import-Certificate -FilePath ""$CertFilePath"" -CertStoreLocation ""Cert:\LocalMachine\Root"""
+                            $Res = Test-WinRMCustom -transport "https" -RemoteHostName $RemoteHostName -RemoteHostCredential $RemoteHostCredential 
+                        }
+                        Else{
+                            $Res = Test-WinRMCustom -Transport "http" -RemoteHostName $RemoteHostName -RemoteHostCredential $RemoteHostCredential
+                        } 
+                    }
+                    Default {
+                        Add-ToLog -Message "Error while connecting [winrm] [$transport] to [$RemoteHostName] under user [$($RemoteHostCredential.UserName)]! `n$_" -logFilePath $Global:gsScriptLogFilePath -Display -category "wsman" -Status "error"
+                            
+                        if ( $transport -ne "http" ){
+                            $Res = Test-WinRMCustom -transport "http" -RemoteHostName $RemoteHostName -RemoteHostCredential $RemoteHostCredential 
+                        }
+                    }
+                }
+            }
+    
+            if ( !$res ){
+                if ( $WinRM.ProductVendor -eq "Microsoft Corporation") {
+                    $res = $true
+                }
+                Else {
+                    $res = $false
+                }
+            }
+    
+            return $Res
+        }
+        $res = $false
+    }
+    process {
+        try {
+            $IP = [System.Net.Dns]::GetHostAddresses( $RemoteHostName ).IPAddressToString
+            if ( $AddToTrusted ){
+                $Res = Test-WinRMCustom -Transport "https" -RemoteHostName $RemoteHostName -RemoteHostCredential  $RemoteHostCredential -AddToTrusted
+            }
+            Else {
+                $Res = Test-WinRMCustom -Transport "https" -RemoteHostName $RemoteHostName -RemoteHostCredential  $RemoteHostCredential
+            }          
+        }
+        Catch {
+            $res = $false
+            Add-ToLog -Message "Error while connecting to [$RemoteHostName]! $_" -logFilePath $Global:gsScriptLogFilePath -Display -category "Connections" -Status "error"
+        }
+    }
+    end {
+        return $res
+    }
 }
 #endregion
 #region Utils
@@ -4431,23 +4643,43 @@ function Show-ColoredTable {
         [PSObject[]] $Statistic,
         [Parameter( Mandatory = $false, Position = 10, HelpMessage = "Exclude fields to display.")]
         [PSObject[]] $Exclude,
-        [Parameter( Mandatory = $false, Position = 11, HelpMessage = "Add row numbers.", ParameterSetName = "Color" )]
+        [Parameter( Mandatory = $false, Position = 11, HelpMessage = "Add row numbers." )]
         [switch] $AddRowNumbers,
         [Parameter( Mandatory = $false, Position = 12, HelpMessage = "Allow only not null results.")]
         [switch] $NotNull,
         [Parameter( Mandatory = $false, Position = 13, HelpMessage = "Allow only single result.")]
         [switch] $Single,
-        [Parameter( Mandatory = $false, Position = 14, HelpMessage = "Add new line at the end.", ParameterSetName = "Color" )]
+        [Parameter( Mandatory = $false, Position = 14, HelpMessage = "Add new line at the end." )]
         [switch] $AddNewLine = $true,
-        [Parameter( Mandatory = $false, Position = 15, HelpMessage = "Show back option.", ParameterSetName = "Color" )]
+        [Parameter( Mandatory = $false, Position = 15, HelpMessage = "Show back option." )]
         [switch] $NoBackOption,
-        [Parameter( Mandatory = $false, Position = 16, HelpMessage = "Show no options.", ParameterSetName = "Color" )]
+        [Parameter( Mandatory = $false, Position = 16, HelpMessage = "Show no options." )]
         [switch] $NoOptions,
-        [Parameter( Mandatory = $false, Position = 17, HelpMessage = "Return object.", ParameterSetName = "Color" )]
+        [Parameter( Mandatory = $false, Position = 17, HelpMessage = "Rotate row to column.")]
+        [switch] $Rotate,
+        [Parameter( Mandatory = $false, Position = 18, HelpMessage = "Return object.")]
         [switch] $PassThru
     )
 
     if ( $Data ){
+        if ( $Rotate ){
+            $NewData = @()
+            $Members   = Get-MembersType -PSO @($Data)
+           
+            foreach ( $item in $Members ) {
+                $Name  = $item.Name
+                $Value = $Data.$Name
+                
+                $PSO = [PSCustomObject]@{
+                    Name  = $Name
+                    Value = $Value
+                }
+                $NewData += $PSO
+            }
+            
+            $Data = $NewData
+        }
+
         $SerialData = [System.Management.Automation.PSSerializer]::Serialize($Data)
         $DataCopy   = [System.Management.Automation.PSSerializer]::Deserialize($SerialData)
 
@@ -5128,13 +5360,15 @@ Function Add-ToDataFile {
         [Parameter( Mandatory = $true, Position = 1, HelpMessage = "File path." )]
         [ValidateNotNullOrEmpty()]
         [string] $FilePath,
-        [Parameter( Mandatory = $false, Position = 2, HelpMessage = "Replace data in file." )]
-        [switch] $Replace,
+        [Parameter( Mandatory = $false, Position = 2, HelpMessage = "AES key path for encryption." )]
+        [string] $AESKeyPath,
         [Parameter( Mandatory = $false, Position = 3, HelpMessage = "Replace data in file." )]
+        [switch] $Replace,
+        [Parameter( Mandatory = $false, Position = 4, HelpMessage = "Replace data in file." )]
         [switch] $Remove,
-        [Parameter( Mandatory = $false, Position = 4, HelpMessage = "Allow data with different structure." )]
+        [Parameter( Mandatory = $false, Position = 5, HelpMessage = "Allow data with different structure." )]
         [switch] $DontCheckStructure,
-        [Parameter( Mandatory = $false, Position = 5, HelpMessage = "Return object." )]
+        [Parameter( Mandatory = $false, Position = 6, HelpMessage = "Return object." )]
         [switch] $PassThru
     )
     begin {
@@ -5143,6 +5377,18 @@ Function Add-ToDataFile {
         $FileMembers = $null
 
         $FileExtension = $FilePath.split(".") | Select-Object -last 1
+
+        if ( !$AESKeyPath ){
+            $AESKeyPath = Get-Content -path $FilePath -Stream "Key.Path" -ErrorAction SilentlyContinue            
+            if ( $AESKeyPath ){
+                if ( $AESKeyPath[0] -ne '"' ) {
+                    $AESKeyPath = Invoke-Expression -Command '"' + $AESKeyPath + '"'
+                }
+                Else {
+                    $AESKeyPath = Invoke-Expression -Command $AESKeyPath
+                }
+            }
+        }        
 
         $FileData = @()
         if ( ( test-path -path $FilePath ) -and ( -not $Replace ) ){
@@ -5155,7 +5401,21 @@ Function Add-ToDataFile {
                         $FileData += import-csv -path $FilePath
                     }
                     "JSON" {
-                        $FileData += get-content -path $FilePath
+                        $Content = get-content -path $FilePath
+                        $FileData += $Content | ConvertFrom-JSON
+                    }
+                    "XML-ENC" {
+                        $Content   = ( Get-VarFromAESFile -VarFilePath $FilePath ) -join ''
+                        $FileData += [Management.Automation.PSSerializer]::Deserialize($Content)
+                    }
+                    "CSV-ENC" {
+                        $Content   = Get-VarFromAESFile -VarFilePath $FilePath
+                        $FileData += ConvertFrom-Csv -InputObject $Content
+                        Convert
+                    }
+                    "JSON-ENC" {
+                        $Content   = Get-VarFromAESFile -VarFilePath $FilePath -AsString                        
+                        $FileData += $Content | ConvertFrom-JSON
                     }
                     Default {}
                 }
@@ -5166,9 +5426,9 @@ Function Add-ToDataFile {
             }
 
             switch ( $FileExtension ) {
-                "XML" {
+                {($_ -eq "XML") -or ($_ -eq "XML-ENC")} {
                 }
-                "CSV" {
+                {($_ -eq "CSV") -or ($_ -eq "CSV-ENC")} {
                     $DateFields = @()
                     $BoolFields = @()
                     $IntFields  = @()
@@ -5199,9 +5459,7 @@ Function Add-ToDataFile {
                         }
                     }
                 }
-                "JSON" {
-                    $FileData  = $FileData | ConvertFrom-JSON
-
+                {($_ -eq "JSON") -or ($_ -eq "JSON-ENC")} { 
                     $DateFields = $FileData.PSobject.members | where-object { $_.TypeNameOfValue -eq "System.Management.Automation.PSCustomObject"}
                     foreach ( $Date in $DateFields ){
                         if ( $Date.DateTime ) {
@@ -5261,17 +5519,35 @@ Function Add-ToDataFile {
                 }
             }
 
-            switch ( $FileExtension ) {
-                "XML" {
-                    $Array | Export-CliXML -path $FilePath -force
+            if ( $AESKeyPath ){
+                switch ( $FileExtension ) {
+                    "XML-ENC" {
+                        $Content = ( $Array | ConvertTo-Xml ) -join ''                  
+                    }
+                    "CSV-ENC" {
+                        $Content = ( $Array | ConvertTo-Csv ) -join ''
+                    }
+                    "JSON-ENC" {
+                        $Content = ( $Array | ConvertTo-Json ) -join ''
+                    }
+                    Default {}
                 }
-                "CSV" {
-                    $Array | export-csv -path $FilePath -force
+
+                $EncryptedContent = Set-VarToAESFile -Var $Content -AESKeyFilePath $AESKeyPath -VarFilePath $FilePath -Force
+            }
+            Else {
+                switch ( $FileExtension ) {
+                    "XML" {
+                        $Array | Export-CliXML -path $FilePath -force
+                    }
+                    "CSV" {
+                        $Array | export-csv -path $FilePath -force
+                    }
+                    "JSON" {
+                        $Array | ConvertTo-Json | Set-Content -path $FilePath -force
+                    }
+                    Default {}
                 }
-                "JSON" {
-                    $Array | ConvertTo-Json | Set-Content -path $FilePath -force
-                }
-                Default {}
             }
         }
     }
@@ -5302,7 +5578,7 @@ Function Get-FromDataFile {
     )
     begin {
         $Array       = @()
-        $FileExtension = split-path -path $FilePath -Extension
+        $FileExtension = $FilePath.split(".") | Select-Object -last 1
         $FileExist = test-path -path $FilePath
         if ( -not ( $FileExist )){
             Add-ToLog -Message "File [$FilePath] doesn't exist!" -logFilePath $Global:gsScriptLogFilePath -Display -Status "Warning"
@@ -5313,14 +5589,28 @@ Function Get-FromDataFile {
             $FileData = @()
             try{
                 switch ( $FileExtension ) {
-                    ".XML" {
+                    "XML" {
                         $FileData += import-cliXML -path $FilePath
                     }
-                    ".CSV" {
+                    "CSV" {
                         $FileData += import-csv -path $FilePath
                     }
-                    ".JSON" {
-                        $FileData += get-content -path $FilePath
+                    "JSON" {
+                        $Content = get-content -path $FilePath
+                        $FileData += $Content | ConvertFrom-JSON
+                    }
+                    "XML-ENC" {
+                        $Content   = ( Get-VarFromAESFile -VarFilePath $FilePath ) -join ''
+                        $FileData += [Management.Automation.PSSerializer]::Deserialize($Content)
+                    }
+                    "CSV-ENC" {
+                        $Content   = Get-VarFromAESFile -VarFilePath $FilePath
+                        $FileData += ConvertFrom-Csv -InputObject $Content
+                        Convert
+                    }
+                    "JSON-ENC" {
+                        $Content   = Get-VarFromAESFile -VarFilePath $FilePath -AsString
+                        $FileData += $Content | ConvertFrom-JSON
                     }
                     Default {}
                 }
@@ -5331,9 +5621,9 @@ Function Get-FromDataFile {
             }
 
             switch ( $FileExtension ) {
-                ".XML" {
+                {($_ -eq "XML") -or ($_ -eq "XML-ENC")} {
                 }
-                ".CSV" {
+                {($_ -eq "CSV") -or ($_ -eq "CSV-ENC")} {
                     $DateFields = @()
                     $BoolFields = @()
                     $IntFields  = @()
@@ -5375,9 +5665,7 @@ Function Get-FromDataFile {
                         }
                     }
                 }
-                ".JSON" {
-                    $FileData  = $FileData | ConvertFrom-JSON
-
+                {($_ -eq "JSON") -or ($_ -eq "JSON-ENC")} {
                     $DateFields = $FileData.PSobject.members | where-object { $_.TypeNameOfValue -eq "System.Management.Automation.PSCustomObject"}
                     foreach ( $Date in $DateFields ){
                         if ( $Date.DateTime ) {
@@ -5637,6 +5925,392 @@ Function Get-FileName {
         return $res
     }
 }
+Function Get-LocalhostIPInformation {
+<#
+    .DESCRIPTION
+        
+#>
+    [OutputType([string])]
+    [CmdletBinding()]
+    Param(        
+    )
+    begin {
+        $Networks = Get-CimInstance -ClassName Win32_NetworkAdapterConfiguration | Where-Object { $_.IPEnabled }  
+        $Res = @()
+    }
+    process {
+        foreach ($Network in $Networks) {
+
+            $WINS1          = $Network.WINSPrimaryServer
+            $WINS2          = $Network.WINSSecondaryServer
+            $WINS           = @($WINS1,$WINS2)
+            
+            If($network.DHCPEnabled) {
+                $IsDHCPEnabled = $true
+            }
+            Else {
+                $IsDHCPEnabled  = $false
+            }
+            
+            $PSO = [PSCustomObject]@{
+                Description   = $Network.Description
+                IPAddress     = $Network.IpAddress
+                SubnetMask    = $Network.IPSubnet
+                Gateway       = $Network.DefaultIPGateway
+                IsDHCPEnabled = $IsDHCPEnabled
+                DNSServers    = $Network.DNSServerSearchOrder
+                DomainSuffixs = $Network.DNSDomainSuffixSearchOrder
+                WINSServers   = $WINS
+                MACAddress    = $Network.MACAddress                
+            }
+
+            $Res += $PSO
+        }
+    }
+    end {
+        return $Res 
+    }
+}
+Function Get-IPv4Subnet {
+    [CmdletBinding(DefaultParameterSetName='PrefixLength')]
+    Param(
+      [Parameter(Mandatory=$true,Position=0)]
+      [IPAddress] $IPAddress,  
+      [Parameter(Position=1,ParameterSetName='PrefixLength')]
+      [Int16]     $PrefixLength=24,  
+      [Parameter(Position=1,ParameterSetName='SubnetMask')]
+      [IPAddress] $SubnetMask
+    )
+    Begin{
+        Function Convert-IPv4AddressToBinaryString {
+            Param(
+                [IPAddress]$IPAddress='0.0.0.0'
+            )
+            $addressBytes=$IPAddress.GetAddressBytes()
+            
+            $strBuilder=New-Object -TypeName Text.StringBuilder
+            foreach($byte in $addressBytes){
+                $8bitString=[Convert]::ToString($byte,2).PadRight(8,'0')
+                [void]$strBuilder.Append($8bitString)
+            }
+            return $strBuilder.ToString()
+        }          
+        Function ConvertIPv4ToInt {
+            [CmdletBinding()]
+            Param(
+                [String]$IPv4Address
+            )
+            Try{
+                $ipAddress=[IPAddress]::Parse($IPv4Address)
+            
+                $bytes=$ipAddress.GetAddressBytes()
+                [Array]::Reverse($bytes)
+            
+                return [System.BitConverter]::ToUInt32($bytes,0)
+            }Catch{
+                Write-Error -Exception $_.Exception  -Category $_.CategoryInfo.Category
+            }
+        }          
+        Function ConvertIntToIPv4 {
+            [CmdletBinding()]
+            Param(
+                [uint32]$Integer
+            )
+            Try{
+                $bytes=[System.BitConverter]::GetBytes($Integer)
+                [Array]::Reverse($bytes)
+                return ([IPAddress]($bytes)).ToString()
+            }Catch{
+                Write-Error -Exception $_.Exception -Category $_.CategoryInfo.Category
+            }
+        }          
+        Function Add-IntToIPv4Address {
+            Param(
+              [String] $IPv4Address,          
+              [int64]  $Integer
+            )
+            Try{
+                $ipInt =  ConvertIPv4ToInt -IPv4Address $IPv4Address -ErrorAction Stop
+                $ipInt += $Integer
+            
+                ConvertIntToIPv4 -Integer $ipInt
+            }Catch{
+                Write-Error -Exception $_.Exception -Category $_.CategoryInfo.Category
+            }
+        }          
+        Function CIDRToNetMask {
+            [CmdletBinding()]
+            Param(
+                [ValidateRange(0,32)]
+                [int16]$PrefixLength=0
+            )
+            $bitString=('1' * $PrefixLength).PadRight(32,'0')
+          
+            $strBuilder=New-Object -TypeName Text.StringBuilder
+          
+            for($i=0;$i -lt 32;$i+=8){
+                $8bitString=$bitString.Substring($i,8)
+                [void]$strBuilder.Append("$([Convert]::ToInt32($8bitString,2)).")
+            }
+          
+            return $strBuilder.ToString().TrimEnd('.')
+        }          
+        Function NetMaskToCIDR {
+            [CmdletBinding()]
+            Param(
+                [String]$SubnetMask='255.255.255.0'
+            )
+            $byteRegex      = '^(0|128|192|224|240|248|252|254|255)$'
+            $invalidMaskMsg = "Invalid SubnetMask specified [$SubnetMask]"
+            Try{
+                $netMaskIP = [IPAddress]$SubnetMask
+                $addressBytes = $netMaskIP.GetAddressBytes()
+            
+                $strBuilder = New-Object -TypeName Text.StringBuilder
+            
+                $lastByte=255
+                foreach($byte in $addressBytes){            
+                    # Validate byte matches net mask value
+                    if($byte -notmatch $byteRegex){
+                        Write-Error -Message $invalidMaskMsg -Category InvalidArgument -ErrorAction Stop
+                    }
+                    elseif($lastByte -ne 255 -and $byte -gt 0){
+                        Write-Error -Message $invalidMaskMsg -Category InvalidArgument -ErrorAction Stop
+                    }
+                
+                    [void]$strBuilder.Append([Convert]::ToString($byte,2))
+                    $lastByte = $byte
+                }
+            
+                return ($strBuilder.ToString().TrimEnd('0')).Length
+            }Catch{
+              Write-Error -Exception $_.Exception  -Category $_.CategoryInfo.Category
+            }
+        }
+
+        $Res = @()        
+    }
+    Process{
+      Try{
+        if($PSCmdlet.ParameterSetName -eq 'SubnetMask'){
+            $PrefixLength=NetMaskToCidr -SubnetMask $SubnetMask -ErrorAction Stop
+        }else{
+            $SubnetMask=CIDRToNetMask -PrefixLength $PrefixLength -ErrorAction Stop
+        }
+        
+        $netMaskInt = ConvertIPv4ToInt -IPv4Address $SubnetMask
+        $ipInt      = ConvertIPv4ToInt -IPv4Address $IPAddress
+        
+        $networkID=ConvertIntToIPv4 -Integer ($netMaskInt -band $ipInt)
+  
+        $maxHosts  = [math]::Pow(2,(32-$PrefixLength)) - 2
+        $broadcast = Add-IntToIPv4Address -IPv4Address $networkID -Integer ($maxHosts+1)
+  
+        $firstIP = Add-IntToIPv4Address -IPv4Address $networkID -Integer 1
+        $lastIP  = Add-IntToIPv4Address -IPv4Address $broadcast -Integer -1
+  
+        if($PrefixLength -eq 32){
+            $broadcast = $networkID
+            $firstIP   = $null
+            $lastIP    = $null
+            $maxHosts  = 0
+        }
+  
+        $PSO = [PSCustomObject]@{
+            CidrID       = "$networkID/$PrefixLength"
+            NetworkID    = $networkID
+            SubnetMask   = $SubnetMask
+            PrefixLength = $PrefixLength
+            HostCount    = $maxHosts
+            FirstHostIP  = $firstIP
+            LastHostIP   = $lastIP
+            Broadcast    = $broadcast
+        }
+        $Res += $PSO
+
+      }
+      Catch{
+            Write-Error -Exception $_.Exception -Category $_.CategoryInfo.Category
+      }
+    }
+    End{
+        Return $Res
+    }
+}
+Function Get-IPType {
+    <#
+        .SYNOPSIS
+            Get IP type
+        .DESCRIPTION
+            Function to info about ip.
+        .EXAMPLE
+            Get-IPType -IP $IP
+        .NOTES
+            AUTHOR  Alexk
+            CREATED 17.08.20
+            VER     1
+    #>
+        [OutputType([pscustomobject])]
+        param (
+            [Parameter( Mandatory = $True, Position = 0, HelpMessage = "IP address." )]
+            [string] $IP
+        )
+    
+        try {
+            [int[]]$IPArray = $IP.Split(".")
+            $IPIsWellFormed = $true
+            if ($IPArray.Count -eq 4) {
+                foreach ($Item in (0..3)) {
+                    $IPItem = $IPArray[$item]
+                    if (($IPItem -gt 255) -or ($IPItem -lt 0)) {
+                        $IPIsWellFormed = $false
+                    }
+                }
+            }
+            $IPVersion = "IPv4"
+        }
+        Catch {
+            try {
+                $Hex = "0", "1", "2", "3", "4", "5", "6", "7", "8", "9", "a", "b", "c", "d", "e", "f"
+    
+                $IPIsWellFormed = $true
+                foreach ( $item in $IP.ToCharArray() ) {
+                    if ( -not ( $item -in $Hex ) ) {
+                        $IPIsWellFormed = $false
+                    }
+                }
+                $IPVersion = "IPv6"
+            }
+            Catch {
+                $IPVersion = ""
+                $IPIsWellFormed = $false
+            }
+        }
+    
+        $PSO = [PSCustomObject]@{
+            IPToString     = $Ip
+            IPType         = $IPType
+            IPIsWellFormed = $IPIsWellFormed
+            IPClass        = ""
+            IPVersion      = $IPVersion
+        }
+    
+        $IP4Classes = [PSCustomObject]@{
+            Loopback     = "Loopback"
+            APIPA        = "APIPA"
+            ClassA       = "Class A"
+            ClassB       = "Class B"
+            ClassC       = "Class C"
+            ClassD       = "Class D"
+            Experimental = "Experimental"
+        }
+    
+        $IP4Type = [PSCustomObject]@{
+            Private         = "Private"
+            Public          = "Public"
+            LocalMulticast  = "Local multicast"
+            GlobalMulticast = "Global multicast"
+            Reserved        = "Reserved"
+        }
+    
+        if ( $IPIsWellFormed ) {
+            if ($IPArray[0] -eq 127) {
+                $PSO.IPClass = $IP4Classes.Loopback
+                $PSO.IPType = $IP4Type.Private
+            }
+            Else {
+                if (($IPArray[0] -eq 169) -and ($IPArray[1] -eq 254) ) {
+                    $PSO.IPClass = $IP4Classes.APIPA
+                    $PSO.IPType = $IP4Type.Private
+                }
+                Else {
+                    if (($IPArray[0] -eq 10)) {
+                        $PSO.IPClass = $IP4Classes.ClassA
+                        $PSO.IPType = $IP4Type.Private
+                    }
+                    Else {
+                        if (($IPArray[0] -eq 172) -and ($IPArray[1] -ge 16) -and ($IPArray[1] -le 31)) {
+                            $PSO.IPClass = $IP4Classes.ClassB
+                            $PSO.IPType = $IP4Type.Private
+                        }
+                        Else {
+                            if ( ($IPArray[0] -eq 192) -and ($IPArray[1] -eq 168) ) {
+                                $PSO.IPClass = $IP4Classes.ClassC
+                                $PSO.IPType = $IP4Type.Private
+                            }
+                            else {
+                                if ( ($IPArray[0] -le 126) ) {
+                                    $PSO.IPClass = $IP4Classes.ClassA
+                                    $PSO.IPType = $IP4Type.Public
+                                }
+                                Else {
+                                    if ( ($IPArray[0] -ge 128) -and ($IPArray[0] -le 191)) {
+                                        $PSO.IPClass = $IP4Classes.ClassB
+                                        $PSO.IPType = $IP4Type.Public
+                                    }
+                                    else {
+                                        if ( ($IPArray[0] -ge 192) -and ($IPArray[0] -le 223)) {
+                                            $PSO.IPClass = $IP4Classes.ClassB
+                                            $PSO.IPType = $IP4Type.Public
+                                        }
+                                        Else {
+                                            if ( ($IPArray[0] -ge 224) -and ($IPArray[0] -le 239)) {
+                                                $PSO.IPClass = $IP4Classes.ClassD
+                                                $PSO.IPType = $IP4Type.GlobalMulticast
+                                                if ( ($IPArray[0] -ge 224) -and ($IPArray[1] -eq 0) -and ($IPArray[2] -eq 0) ) {
+                                                    if ( ($IPArray[0] -ne 9) ) {
+                                                        $PSO.IPType = $IP4Type.LocalMulticast
+                                                    }
+                                                    Else {
+                                                        $PSO.IPType = $IP4Type.Reserved
+                                                    }
+                                                }
+                                            }
+                                            Else {
+                                                if ( ($IPArray[0] -ge 240) -and ($IPArray[0] -le 247)) {
+                                                    $PSO.IPClass = $IP4Classes.Experimental
+                                                    $PSO.IPType = $IP4Type.Public
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    
+        return $PSO
+}
+Function Start-WOL {
+<#
+    .DESCRIPTION
+        Start wake up on LAN procedure.
+#>
+    [OutputType([string])]
+    [CmdletBinding()]
+    Param(
+        [Parameter( Mandatory = $true, Position = 0, HelpMessage = "MAC address." )]
+        [string] $MAC
+    )
+    begin {
+        $MacByteArray          = $Mac -split "[:-]" | ForEach-Object { [Byte] "0x$_"}
+        [Byte[]] $MagicPacket  = (,0xFF * 6) + ($MacByteArray  * 16)
+    }
+    process {        
+        $UdpClient = New-Object System.Net.Sockets.UdpClient
+        $UdpClient.Connect(([System.Net.IPAddress]::Broadcast),7)
+        $UdpClient.Send( $MagicPacket, $MagicPacket.Length )
+        $UdpClient.Close()
+    }
+    end {
+
+    }
+}
+
+
 #endregion
 #region Dialog
 Function Show-OpenDialog{
@@ -5921,7 +6595,7 @@ function Get-ErrorReporting {
 #>
 
 
-Export-ModuleMember -Function Get-NewAESKey, Get-VarFromAESFile, Set-VarToAESFile, Disconnect-VPN, Connect-VPN, Add-ToLog, Restart-Switches, Restart-SwitchInInterval, Get-EventList, Send-Email, Start-PSScript, Restart-LocalHostInInterval, Show-Notification, Restart-ServiceInInterval, New-TelegramMessage, Get-SettingsFromFile, Get-HTMLTable, Get-HTMLCol, Get-ContentFromHTMLTemplate, Get-ErrorReporting, Get-CopyByBITS, Show-OpenDialog, Import-ModuleRemotely, Invoke-PSScriptBlock, Get-ACLArray, Set-PSModuleManifest, Get-VarToString, Get-UniqueArrayMembers, Resolve-IPtoFQDNinArray, Get-HelpersData, Get-DifferenceBetweenArrays, Test-Credentials, Convert-FSPath, Start-Program, Test-ElevatedRights, Invoke-CommandWithDebug, Format-TimeSpan, Start-ParallelPortPing, Join-Array, Set-State, Send-Alert, Start-Module, Convert-SpecialCharacters, Get-ListByGroups, Convert-StringToDigitArray, Convert-PSCustomObjectToHashTable, Invoke-TrailerIncrease, Split-words, Remove-Modules, Get-TextLengthPreview, Export-RegistryToFile, Show-ColoredTable, Get-Answer,  Get-AESData, Add-ToDataFile, Get-FromDataFile, Compare-Arrays, Get-ColorText, Get-DiskVolumeInfo, Remove-ItemToRecycleBin, Get-MembersType, Compare-ArraysVisual, Get-FileName, Get-DataStatistic, Show-UnprintableChars, Get-ExportedParameters
+Export-ModuleMember -Function Get-NewAESKey, Get-VarFromAESFile, Set-VarToAESFile, Disconnect-VPN, Connect-VPN, Add-ToLog, Restart-Switches, Restart-SwitchInInterval, Get-EventList, Send-Email, Start-PSScript, Restart-LocalHostInInterval, Show-Notification, Restart-ServiceInInterval, New-TelegramMessage, Get-SettingsFromFile, Get-HTMLTable, Get-HTMLCol, Get-ContentFromHTMLTemplate, Get-ErrorReporting, Get-CopyByBITS, Show-OpenDialog, Import-ModuleRemotely, Invoke-PSScriptBlock, Get-ACLArray, Set-PSModuleManifest, Get-VarToString, Get-UniqueArrayMembers, Resolve-IPtoFQDNinArray, Get-HelpersData, Get-DifferenceBetweenArrays, Test-Credentials, Convert-FSPath, Start-Program, Test-ElevatedRights, Invoke-CommandWithDebug, Format-TimeSpan, Start-ParallelPortPing, Join-Array, Set-State, Send-Alert, Start-Module, Convert-SpecialCharacters, Get-ListByGroups, Convert-StringToDigitArray, Convert-PSCustomObjectToHashTable, Invoke-TrailerIncrease, Split-words, Remove-Modules, Get-TextLengthPreview, Export-RegistryToFile, Show-ColoredTable, Get-Answer,  Get-AESData, Add-ToDataFile, Get-FromDataFile, Compare-Arrays, Get-ColorText, Get-DiskVolumeInfo, Remove-ItemToRecycleBin, Get-MembersType, Compare-ArraysVisual, Get-FileName, Get-DataStatistic, Show-UnprintableChars, Get-ExportedParameters, Test-RemoteHostWSMAN, Get-LocalhostIPInformation, Get-IPv4Subnet, Get-IPType, Start-WOL
 
 <#
 
