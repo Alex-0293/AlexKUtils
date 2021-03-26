@@ -2976,6 +2976,7 @@ Function Test-RemoteHostWSMAN {
                 }
     
                 [xml]$Content = $LastError.Exception.message
+                $ErrorMessage = $content.WSManFault.Message
                 switch -wildcard ( $content.WSManFault.Code ) {
                     5 {
                         # Access is denied.
@@ -2983,7 +2984,7 @@ Function Test-RemoteHostWSMAN {
                         return $False
                     }
                     "*The SSL certificate is signed by an unknown certificate authority.*" {                        
-                        Add-ToLog -Message "Error while connecting [winrm] [$Transport] to [$RemoteHostName] under user [$($RemoteHostCredential.UserName)]!`n$($content.WSManFault.message)" -logFilePath $Global:gsScriptLogFilePath -Display -category "WinRM" -Status "error"
+                        Add-ToLog -Message "Error while connecting [winrm] [$Transport] to [$RemoteHostName] under user [$($RemoteHostCredential.UserName)]!`n$ErrorMessage" -logFilePath $Global:gsScriptLogFilePath -Display -category "WinRM" -Status "error"
 
                         $CertFolderPath = "$($Global:ProjectRoot)\$($Global:gsDATAFolder)\CERT"
                         $Certificate = get-ChildItem -path $CertFolderPath -Filter "*.cer" -Recurse | Where-Object { $_.name -eq "$RemoteHostName-PS-Cert.cer" } | Select-Object -First 1
@@ -3068,7 +3069,7 @@ Function Test-RemoteHostWSMAN {
                         } 
                     }
                     Default {
-                        Add-ToLog -Message "Error while connecting [winrm] [$transport] to [$RemoteHostName] under user [$($RemoteHostCredential.UserName)]! `n$_" -logFilePath $Global:gsScriptLogFilePath -Display -category "wsman" -Status "error"
+                        Add-ToLog -Message "Error while connecting [winrm] [$transport] to [$RemoteHostName] under user [$($RemoteHostCredential.UserName)]! `n$ErrorMessage" -logFilePath $Global:gsScriptLogFilePath -Display -category "wsman" -Status "error"
                             
                         if ( $transport -ne "http" ){
                             $Res = Test-WinRMCustom -transport "http" -RemoteHostName $RemoteHostName -RemoteHostCredential $RemoteHostCredential 
