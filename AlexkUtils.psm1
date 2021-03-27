@@ -6302,8 +6302,8 @@ Function Start-WOL {
     }
     process {        
         $UdpClient = New-Object System.Net.Sockets.UdpClient
-        $UdpClient.Connect(([System.Net.IPAddress]::Broadcast),7)
-        $UdpClient.Send( $MagicPacket, $MagicPacket.Length )
+        [void] $UdpClient.Connect(([System.Net.IPAddress]::Broadcast),7)
+        [void] $UdpClient.Send( $MagicPacket, $MagicPacket.Length )
         $UdpClient.Close()
     }
     end {
