@@ -16,10 +16,11 @@
 #>
 
 
-[bool]   $Global:modSuppressOutput   = $false
-[int]    $Global:modPSSessionCounter = 0
-[int]    $Global:modDialogNumber     = 1
-[array]  $Global:modGroupListArray = @()
+[bool]  $Global:modSuppressOutput   = $false
+[int]   $Global:modPSSessionCounter = 0
+[int]   $Global:modDialogNumber     = 1
+[array] $Global:modGroupListArray   = @()
+[array] $Global:modConnectionTable  = @()
 
 $res = Get-Module -ListAvailable "Pansies"
 if ( $res ){
@@ -2212,7 +2213,7 @@ function Import-ModuleRemotely {
         [string]   $Global:gsScriptLocalHost      = $using:gsScriptLocalHost
         [array]    $Global:gsLogBuffer            = @()
         [string]   $Global:gsScriptLogFilePath    = $using:gsScriptLogFilePath
-        [int16 ]   $Global:gsParentLevel          = $using:gsParentLevel
+        [int16]    $Global:gsParentLevel          = $using:gsParentLevel
         [string]   $Global:gsLogFileNamePosition  = $using:gsLogFileNamePosition
         $Global:gsRunningCredentials              = [System.Security.Principal.WindowsIdentity]::GetCurrent()
 
@@ -2302,71 +2303,90 @@ function Invoke-PSScriptBlock {
         begin {
             $PSSessionConfigurationName = 'PowerShell.7'
             $State                      = $True
+            
+            $IP = [System.Net.Dns]::GetHostAddresses( $StartParams.Computer ).IPAddressToString
+            $ConnectionRecord = $Global:modConnectionTable | Where-Object { $_.ip -eq $IP }
 
+            Function New-RemoteTransportSession {
+            <#
+                .DESCRIPTION
+                    
+            #>
+                [OutputType([string])]
+                [CmdletBinding()]
+                Param(
+                    [Parameter( Mandatory = $true, Position = 0, HelpMessage = "Parameters." )]
+                    [PSObject] $StartParams,
+                    [Parameter( Mandatory = $false, Position = 1, HelpMessage = "PS session options." )]
+                    [PSObject] $SessionOptions,
+                    [Parameter( Mandatory = $true, Position = 2, HelpMessage = "PS session transport." )]
+                    [ValidateSet("HTTP","HTTPS")]
+                    [string] $Transport                    
+                )
+                begin {
+                    $LastError = $null
+                    Add-ToLog -Message "Creating new [$transport] session to [$($StartParams.computer)]." -logFilePath $Global:gsScriptLogFilePath -Display -Category "session" -Status "info"
+                }
+                process {                    
+                    $WSMan = Measure-Command -Expression {
+                        if ( $Transport -eq "HTTPS"){
+                            $Global:modSession  = New-PSSession @StartParams -UseSSL -ErrorVariable LastError -ErrorAction stop
+                        }
+                        Else {
+                            $Global:modSession  = New-PSSession @StartParams -ErrorVariable LastError -ErrorAction stop
+                        }
+                    }
+                    
+                }
+                end {
+                    if ( $LastError ){
+                        Add-ToLog -Message "Error while creating session [$($Global:modSession.Id)]. Transport [$($Global:modSession.transport)]. Time [$( Format-TimeSpan -TimeSpan $WSMan )]" -logFilePath $Global:gsScriptLogFilePath -Display -category "session" -Status "error"
+                    }
+                    Else {
+                        Add-ToLog -Message "Successfull created session [$($Global:modSession.Id)]. Transport [$($Global:modSession.transport)], state [$($Global:modSession.state)], availability [$($Global:modSession.availability)]. Time [$( Format-TimeSpan -TimeSpan $WSMan )]" -logFilePath $Global:gsScriptLogFilePath -Display -category "session" -Status "info"
+                    }
+
+                    return $LastError
+                }
+            }
         }
         process {
-            try {
-                Add-ToLog -Message "Creating new [https] session to [$($StartParams.computer)]." -logFilePath $Global:gsScriptLogFilePath -Display -category "session" -Status "info"
-                $Global:modSession  = New-PSSession @StartParams -UseSSL -ErrorVariable LastError -ErrorAction stop
-                Add-ToLog -Message "Successfull created session [$($Global:modSession.Id)]. Transport [$($Global:modSession.transport)], state [$($Global:modSession.state)], availability [$($Global:modSession.availability)]." -logFilePath $Global:gsScriptLogFilePath -Display -category "session" -Status "info"
+
+            if ( $ConnectionRecord ){
+                $LastError = New-RemoteTransportSession -StartParams $StartParams -SessionOptions $SessionOptions -Transport $ConnectionRecord.transport
             }
-            Catch {
-                if ( $LastError ) {
-                    Add-ToLog -Message $LastError.ErrorRecord -logFilePath $Global:gsScriptLogFilePath -Display -Status "Error"
-                    switch ( $LastError.ErrorRecord.Exception.TransportMessage ) {
-                        "A security error occurred " {
-                            #$Answer = Get-Answer -Title "Do you want to connect without SSL sertificate validation?" -ChooseFrom "y","n" -DefaultChoose "y" -AddNewLine
-                            $Answer = "N"
-                            if ( $Answer -eq "Y" ) {
-                                $SessionOptions += New-PSSessionOption -SkipCACheck
-                                $StartParams += @{ SessionOption = $SessionOptions }
-                                $Global:modSessionParams = $StartParams
-                                try {
-                                    Add-ToLog -Message "Creating new [https] session to [$($StartParams.computer)]." -logFilePath $Global:gsScriptLogFilePath -Display -category "session" -Status "info"
-                                    $Global:modSession       = New-PSSession @StartParams -UseSSL -ErrorVariable LastError -ErrorAction stop
-                                    Add-ToLog -Message "Successfull." -logFilePath $Global:gsScriptLogFilePath -Display -category "session" -Status "info"
-                                }
-                                Catch {
-                                    if ( $LastError ) {
-                                        Add-ToLog -Message $LastError.ErrorRecord -logFilePath $Global:gsScriptLogFilePath -Display -Status "Error"
-                                    }
-                                    Add-ToLog -Message "Creating new [http] session to [$($StartParams.computer)]." -logFilePath $Global:gsScriptLogFilePath -Display -category "session" -Status "info"
-                                    try {
-                                        $Global:modSession       = New-PSSession @StartParams
-                                        Add-ToLog -Message "Successfull." -logFilePath $Global:gsScriptLogFilePath -Display -category "session" -Status "info"
-                                    }
-                                    Catch {
-                                        Add-ToLog -Message "Unsuccessful." -logFilePath $Global:gsScriptLogFilePath -Display -category "session" -Status "error"
-                                        $State = $False
-                                    }
-                                }                                
+            Else {
+                $LastError = New-RemoteTransportSession -StartParams $StartParams -SessionOptions $SessionOptions -Transport "HTTPS"
+            }
+            
+            if ( $LastError ) {
+                Add-ToLog -Message $LastError.ErrorRecord -logFilePath $Global:gsScriptLogFilePath -Display -Status "Error"
+                switch ( $LastError.ErrorRecord.Exception.TransportMessage ) {
+                    "A security error occurred " {
+                        #$Answer = Get-Answer -Title "Do you want to connect without SSL sertificate validation?" -ChooseFrom "y","n" -DefaultChoose "y" -AddNewLine
+                        $Answer = "N"
+                        if ( $Answer -eq "Y" ) {
+                            $SessionOptions += New-PSSessionOption -SkipCACheck
+                            $StartParams += @{ SessionOption = $SessionOptions }
+                            $Global:modSessionParams = $StartParams
+                            
+                            $LastError = New-RemoteTransportSession -StartParams $StartParams -SessionOptions $SessionOptions -Transport "HTTPS"
+                            
+                            if ( $LastError ) {
+                                Add-ToLog -Message $LastError.ErrorRecord -logFilePath $Global:gsScriptLogFilePath -Display -Status "Error"
                             }
-                            Else {
-                                Add-ToLog -Message "Creating new [http] session to [$($StartParams.computer)]." -logFilePath $Global:gsScriptLogFilePath -Display -category "session" -Status "info"
-                                try {
-                                    $Global:modSession       = New-PSSession @StartParams
-                                    Add-ToLog -Message "Successfull." -logFilePath $Global:gsScriptLogFilePath -Display -category "session" -Status "info"
-                                }
-                                Catch {
-                                    Add-ToLog -Message "Unsuccessful." -logFilePath $Global:gsScriptLogFilePath -Display -category "session" -Status "error"
-                                    $State = $False
-                                }
-                            }
+                            $LastError = New-RemoteTransportSession -StartParams $StartParams -SessionOptions $SessionOptions -Transport "HTTP"                                                           
                         }
-                        Default {
-                            Add-ToLog -Message "Creating new [http] session to [$($StartParams.computer)]." -logFilePath $Global:gsScriptLogFilePath -Display -category "session" -Status "info"
-                            try {
-                                $Global:modSession       = New-PSSession @StartParams
-                                Add-ToLog -Message "Successfull." -logFilePath $Global:gsScriptLogFilePath -Display -category "session" -Status "info"
-                            }
-                            Catch {
-                                Add-ToLog -Message "Unsuccessful." -logFilePath $Global:gsScriptLogFilePath -Display -category "session" -Status "error"
-                                $State = $False
-                            }
+                        Else {
+                            $LastError = New-RemoteTransportSession -StartParams $StartParams -SessionOptions $SessionOptions -Transport "HTTP"
                         }
+                    }
+                    Default {                        
+                        $LastError = New-RemoteTransportSession -StartParams $StartParams -SessionOptions $SessionOptions -Transport "HTTP"
                     }
                 }
             }
+            
             if ( $State ){
                 $Global:modPSSessionCounter ++
             }
@@ -2955,15 +2975,25 @@ Function Test-RemoteHostWSMAN {
                 [PSCredential]$RemoteHostCredential,
                 [Parameter( Mandatory = $false, Position = 3, HelpMessage = "Certificate thumbprint." )]
                 [string] $Thumbprint,
-                [Parameter( Mandatory = $false, Position = 4, HelpMessage = "If add to trusted host." )]
+                [Parameter( Mandatory = $true, Position = 4, HelpMessage = "IP." )]
+                [string] $IP,
+                [Parameter( Mandatory = $false, Position = 5, HelpMessage = "If add to trusted host." )]
                 [switch] $AddToTrusted
             ) 
 
             if ( $transport -eq "http" ){
-                $WinRM = Test-WSMan -ComputerName  $RemoteHostName -Credential $RemoteHostCredential  -Authentication default -ErrorVariable LastError -ErrorAction SilentlyContinue
+                $WSMan = Measure-Command -Expression {
+                    $WinRM = Test-WSMan -ComputerName  $RemoteHostName -Credential $RemoteHostCredential  -Authentication default -ErrorVariable LastError -ErrorAction SilentlyContinue
+                }
             }
             ElseIf ( $transport -eq "https" ) {
+                $WSMan = Measure-Command -Expression {
                     $WinRM = Test-WSMan -ComputerName $RemoteHostName -Credential $RemoteHostCredential  -Authentication default -UseSSL -ErrorVariable LastError -ErrorAction SilentlyContinue
+                }
+            }
+
+            if( $WinRM ){
+                Add-ToLog -Message "Successfully test WSMan to [$RemoteHostName] on [$transport]. Time [$( Format-TimeSpan -TimeSpan $WSMan )]." -logFilePath $Global:gsScriptLogFilePath -Display -category "WSMan" -Status "info"
             }
     
             if ( $LastError ){
@@ -2980,7 +3010,12 @@ Function Test-RemoteHostWSMAN {
                 switch -wildcard ( $content.WSManFault.Code ) {
                     5 {
                         # Access is denied.
-                        Add-ToLog -Message "Connecting to [winrm] [$Transport] on [$RemoteHostName] under user [$($RemoteHostCredential.UserName)] failed with error [Access is denied.]!" -logFilePath $Global:gsScriptLogFilePath -Display -category "wsman" -Status "error"
+                        Add-ToLog -Message "Connecting to [winrm] [$Transport] on [$RemoteHostName] under user [$($RemoteHostCredential.UserName)] failed with error [Access is denied]!" -logFilePath $Global:gsScriptLogFilePath -Display -category "wsman" -Status "error"
+                        return $False
+                    }
+                    2150859194 {
+                        # The SSL connection cannot be established.
+                        Add-ToLog -Message "Connecting to [winrm] [$Transport] on [$RemoteHostName] under user [$($RemoteHostCredential.UserName)] failed with error [The SSL connection cannot be established]!`n$($content.WSManFault.message)" -logFilePath $Global:gsScriptLogFilePath -Display -category "wsman" -Status "error"
                         return $False
                     }
                     "*The SSL certificate is signed by an unknown certificate authority.*" {                        
@@ -2995,7 +3030,7 @@ Function Test-RemoteHostWSMAN {
                             $Answer = Get-Answer -Title "Do you want to [I]nstall remote certificate, just [h]ttp connection? " -ChooseFrom  "I", "H" -DefaultChoose "I" -AddNewLine -NotNull
                         }
                         if ( $Answer -eq "I") {
-                            $Res = Test-WinRMCustom -Transport "http" -RemoteHostName $RemoteHostName -RemoteHostCredential $RemoteHostCredential
+                            $Res = Test-WinRMCustom -Transport "http" -RemoteHostName $RemoteHostName -RemoteHostCredential $RemoteHostCredential -IP $IP
                             
                             if ( $Res ){
                                 
@@ -3052,7 +3087,7 @@ Function Test-RemoteHostWSMAN {
                                     Add-ToLog -Message "Adding remote host [$Computer] certificate, to local store [LocalMachine\Root]." -logFilePath $Global:gsScriptLogFilePath -Display -category "certificate" -Status "info"
                                     gsudo "Import-Certificate -FilePath ""$CertFilePath"" -CertStoreLocation ""Cert:\LocalMachine\Root"""
 
-                                    $Res = Test-WinRMCustom -transport "https" -RemoteHostName $RemoteHostName -RemoteHostCredential $RemoteHostCredential 
+                                    $Res = Test-WinRMCustom -transport "https" -RemoteHostName $RemoteHostName -RemoteHostCredential $RemoteHostCredential -IP $IP 
                                 }
                                 Else {
                                     Add-ToLog -Message "Error while getting https certificate on [$RemoteHostName]. $($Res1.Error)" -logFilePath $Global:gsScriptLogFilePath -Display -category "info" -Status "error"
@@ -3062,44 +3097,73 @@ Function Test-RemoteHostWSMAN {
                         Elseif ( $Answer -eq "E" ){
                             $CertFilePath = $Certificate.FullName
                             gsudo "Import-Certificate -FilePath ""$CertFilePath"" -CertStoreLocation ""Cert:\LocalMachine\Root"""
-                            $Res = Test-WinRMCustom -transport "https" -RemoteHostName $RemoteHostName -RemoteHostCredential $RemoteHostCredential 
+                            $Res = Test-WinRMCustom -transport "https" -RemoteHostName $RemoteHostName -RemoteHostCredential $RemoteHostCredential -IP $IP
                         }
                         Else{
-                            $Res = Test-WinRMCustom -Transport "http" -RemoteHostName $RemoteHostName -RemoteHostCredential $RemoteHostCredential
+                            $Res = Test-WinRMCustom -Transport "http" -RemoteHostName $RemoteHostName -RemoteHostCredential $RemoteHostCredential -IP $IP
                         } 
                     }
                     Default {
                         Add-ToLog -Message "Error while connecting [winrm] [$transport] to [$RemoteHostName] under user [$($RemoteHostCredential.UserName)]! `n$ErrorMessage" -logFilePath $Global:gsScriptLogFilePath -Display -category "wsman" -Status "error"
                             
                         if ( $transport -ne "http" ){
-                            $Res = Test-WinRMCustom -transport "http" -RemoteHostName $RemoteHostName -RemoteHostCredential $RemoteHostCredential 
+                            $Res = Test-WinRMCustom -transport "http" -RemoteHostName $RemoteHostName -RemoteHostCredential $RemoteHostCredential -IP $IP
                         }
                     }
                 }
             }
     
             if ( !$res ){
-                if ( $WinRM.ProductVendor -eq "Microsoft Corporation") {
-                    $res = $true
+                if ( $WinRM.ProductVendor -eq "Microsoft Corporation") {                    
+                    $res = $true                    
                 }
                 Else {
                     $res = $false
                 }
             }
+
+            $PSO = [PSCustomObject]@{
+                Ip        = $IP
+                Address   = $RemoteHostName
+                Transport = $Transport
+                Res       = $WinRM
+            }
     
+            if ( $IP -notin $Global:modConnectionTable.ip ){
+                $Global:modConnectionTable += $PSO
+            }
+
+            $Global:WSManData += $PSO
+
             return $Res
         }
-        $res = $false
+        $res = $Null
+        $Global:WSManData = @()
     }
     process {
         try {
-            $IP = [System.Net.Dns]::GetHostAddresses( $RemoteHostName ).IPAddressToString
-            if ( $AddToTrusted ){
-                $Res = Test-WinRMCustom -Transport "https" -RemoteHostName $RemoteHostName -RemoteHostCredential  $RemoteHostCredential -AddToTrusted
-            }
-            Else {
-                $Res = Test-WinRMCustom -Transport "https" -RemoteHostName $RemoteHostName -RemoteHostCredential  $RemoteHostCredential
-            }          
+            $WSMan = Measure-Command -Expression {
+                $IP = [System.Net.Dns]::GetHostAddresses( $RemoteHostName ).IPAddressToString
+
+                $ConnectionRecord = $Global:modConnectionTable | Where-Object { $_.ip -eq $IP }
+                if ( $ConnectionRecord ){
+                    $Transport = $ConnectionRecord.transport
+                    if ( $AddToTrusted ){
+                        $Res = Test-WinRMCustom -Transport $Transport -RemoteHostName $RemoteHostName -RemoteHostCredential  $RemoteHostCredential -AddToTrusted -IP $IP
+                    }
+                    Else {
+                        $Res = Test-WinRMCustom -Transport $Transport -RemoteHostName $RemoteHostName -RemoteHostCredential  $RemoteHostCredential -IP $IP
+                    }
+                }
+                Else {
+                    if ( $AddToTrusted ){
+                        $Res = Test-WinRMCustom -Transport "https" -RemoteHostName $RemoteHostName -RemoteHostCredential  $RemoteHostCredential -AddToTrusted -IP $IP
+                    }
+                    Else {
+                        $Res = Test-WinRMCustom -Transport "https" -RemoteHostName $RemoteHostName -RemoteHostCredential  $RemoteHostCredential -IP $IP
+                    }       
+                }
+            }   
         }
         Catch {
             $res = $false
@@ -3107,7 +3171,13 @@ Function Test-RemoteHostWSMAN {
         }
     }
     end {
-        return $res
+        if ( $res ){
+            $Global:WSManData | Add-Member -NotePropertyName "WSManTime" -NotePropertyValue ( Format-TimeSpan -TimeSpan $WSMan )
+            return $Global:WSManData
+        }
+        Else {
+            return $res
+        }
     }
 }
 #endregion
@@ -5954,6 +6024,7 @@ Function Get-LocalhostIPInformation {
             }
             
             $PSO = [PSCustomObject]@{
+                Index         = $Network.Index
                 Description   = $Network.Description
                 IPAddress     = $Network.IpAddress
                 SubnetMask    = $Network.IPSubnet
